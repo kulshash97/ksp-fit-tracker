@@ -367,12 +367,12 @@ elif menu == "📑 InBody & Body Composition":
           unsafe_allow_html=True,
       )
 
-# ------------ SECTION 3: PPL WORKOUT LOGGER (MULTI-SET ENGINE) ------------
+# ------------ SECTION 3: PPL WORKOUT LOGGER (CALIBRATED MET CALORIES) ------------
 elif menu == "🏋️ PPL Workout Logger":
   st.title("🏋️ Progressive Overload & Multi-Set Logger")
   st.markdown(
-      "Log variable weights set-by-set with automated tonnage volume and calorie"
-      " burn telemetry."
+      "Log variable weights set-by-set with automated tonnage volume and"
+      " calibrated resistance training energy burn."
   )
 
   w1, w2 = st.columns([2, 1])
@@ -385,7 +385,6 @@ elif menu == "🏋️ PPL Workout Logger":
   exercises = PPL_ROUTINES[split_choice]
   user_weight = float(profile.get("weight_kg", 74.8))
 
-  # Initialize dynamic set counts per exercise in session state
   if "exercise_set_counts" not in st.session_state:
     st.session_state.exercise_set_counts = {}
 
@@ -396,7 +395,6 @@ elif menu == "🏋️ PPL Workout Logger":
   for idx, ex in enumerate(exercises):
     st.markdown(f"### {idx + 1}. {ex}")
 
-    # Default to 3 sets if not set
     set_count_key = f"{log_date}_{ex}_count"
     if set_count_key not in st.session_state.exercise_set_counts:
       st.session_state.exercise_set_counts[set_count_key] = 3
@@ -420,7 +418,6 @@ elif menu == "🏋️ PPL Workout Logger":
     ex_volume = 0.0
     ex_cals = 0.0
 
-    # Table Header
     hdr1, hdr2, hdr3, hdr4 = st.columns([1, 2, 2, 2])
     hdr1.caption("Set #")
     hdr2.caption("Weight (kg)")
@@ -449,13 +446,15 @@ elif menu == "🏋️ PPL Workout Logger":
             label_visibility="collapsed",
         )
 
-      # Per-set volume & estimated kcal
+      # Volume per set
       set_vol = s_wt * s_rp
-      # Resistance training MET calculation: ~5.0 METs (~0.08 kcal/kg/min). ~45 sec set work + rest ~ 0.065 * weight * (reps/10)
-      set_kcal = round(
-          0.00085 * (s_wt + user_weight) * max(s_rp, 1)
-          + (0.025 * user_weight * 0.75),
-          1,
+
+      # Calibrated Resistance MET formula:
+      # Factors in active muscle contraction work + elevated oxygen consumption (EPOC) during 60-90s inter-set rest
+      set_kcal = (
+          round((0.14 * user_weight) + (0.0022 * set_vol), 1)
+          if (s_wt > 0 or s_rp > 0)
+          else 0.0
       )
 
       ex_volume += set_vol
@@ -500,11 +499,10 @@ elif menu == "🏋️ PPL Workout Logger":
       key=f"{log_date}_finisher_val",
   )
 
-  # Treadmill calorie burn: ~160 kcal for 20 mins at 15% incline @ 74.8 kg
-  cardio_cals = 160.0 if finisher_done else 0.0
+  # Treadmill burn: ~165 kcal for 20 mins at 15% incline @ ~75 kg
+  cardio_cals = 165.0 if finisher_done else 0.0
   total_session_cals = round(grand_total_lift_cals + cardio_cals, 1)
 
-  # Grand Totals Display
   st.markdown("---")
   st.subheader("🏁 Session Summary & Grand Totals")
   g1, g2, g3 = st.columns(3)
