@@ -20,6 +20,7 @@ st.markdown(
     .metric-value { color: #58a6ff; font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .metric-subtext { color: #3fb950; font-size: 0.8rem; }
     .scan-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-top: 10px; }
+    .set-row { background: #161b22; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; border: 1px solid #21262d; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -184,7 +185,6 @@ menu = st.sidebar.radio(
 if menu == "📊 Dashboard & BMI":
   st.title("⚡ Performance Dashboard & Vitals")
 
-  # Dynamic Metric Top Cards linked to profile state
   c1, c2, c3, c4 = st.columns(4)
   c1.markdown(
       f"""<div class="metric-card">
@@ -309,16 +309,12 @@ elif menu == "📑 InBody & Body Composition":
       )
 
     if st.button("🚀 Recalibrate Macros & Training Split"):
-      # Lean Body Mass calculation: Weight * (1 - BFP/100)
       lean_mass = scan_weight * (1.0 - (scan_bfp / 100.0))
-      # Minimum 2.0g protein per kg of Lean Body Mass
       recommended_protein = int(round(lean_mass * 2.2))
       if recommended_protein < 115:
         recommended_protein = 120
 
-      # Basal Metabolic Rate via Katch-McArdle: 370 + (21.6 * lean_mass)
       bmr = 370 + (21.6 * lean_mass)
-      # Sedentary/Moderate activity multiplier (approx 1.35) minus 500 kcal deficit
       tdee = bmr * 1.35
       caloric_deficit = int(round(tdee - 450))
 
@@ -337,14 +333,17 @@ elif menu == "📑 InBody & Body Composition":
       res2.metric("Target Protein (Pure Veg)", f"{recommended_protein}g / day")
       res3.metric("Lean Body Mass (LBM)", f"{round(lean_mass, 1)} kg")
 
-      st.markdown(f"""<div class="scan-card">
+      st.markdown(
+          f"""<div class="scan-card">
             <h4>📋 Tactical Adjustments Generated</h4>
             <ul>
                 <li><strong>Visceral Fat Level ({scan_vfl}):</strong> Maintain the 15% incline walk at 2.5 km/h for 20 minutes post-lifting to accelerate abdominal lipid oxidation.</li>
                 <li><strong>Skeletal Muscle Mass ({scan_smm} kg):</strong> PPL volume set to 3 working sets per exercise at RPE 8–9 to retain muscle in deficit.</li>
                 <li><strong>Protein Requirement:</strong> At {recommended_protein}g/day, anchor meals around 60g soya chunks (30g protein), 1 scoop pea protein (24g), 100g paneer (18g), and curd/besan chillas.</li>
             </ul>
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+          unsafe_allow_html=True,
+      )
 
   with tab_photo:
     st.subheader("Visual Physique & Body Fat Check")
@@ -357,67 +356,189 @@ elif menu == "📑 InBody & Body Composition":
       img = Image.open(user_photo)
       st.image(img, caption="Physique Snapshot", width=340)
 
-      # Visual assessment profile benchmark
       curr_bf = profile.get("body_fat_pct", 32.0)
-      st.markdown(f"""<div class="scan-card">
+      st.markdown(
+          f"""<div class="scan-card">
             <h4>🔍 Visual Telemetry Breakdown</h4>
             <p><strong>Estimated Body Fat Range:</strong> ~{int(curr_bf - 2)}% – {int(curr_bf + 2)}%</p>
             <p><strong>Frame Analysis:</strong> Broad shoulders and thick upper-body muscle base present. Abdominal definition currently masked by subcutaneous adipose layer.</p>
             <p><strong>30-Day Milestone:</strong> With a 450 kcal deficit and 120g protein, expect 2.0–2.5 kg fat loss with visible waist taper tightening.</p>
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+          unsafe_allow_html=True,
+      )
 
-# ----------------- SECTION 3: PPL WORKOUT LOGGER -----------------
+# ------------ SECTION 3: PPL WORKOUT LOGGER (MULTI-SET ENGINE) ------------
 elif menu == "🏋️ PPL Workout Logger":
-  st.title("🏋️ PPL Workout Logger")
+  st.title("🏋️ Progressive Overload & Multi-Set Logger")
+  st.markdown(
+      "Log variable weights set-by-set with automated tonnage volume and calorie"
+      " burn telemetry."
+  )
+
   w1, w2 = st.columns([2, 1])
   with w1:
     split_choice = st.selectbox("Select Training Day", list(PPL_ROUTINES.keys()))
   with w2:
-    session_date = st.date_input("Date", value=date.today())
+    session_date = st.date_input("Workout Date", value=date.today())
     log_date = session_date.strftime("%Y-%m-%d")
 
   exercises = PPL_ROUTINES[split_choice]
-  with st.form(key="ppl_form"):
-    session_data = {}
-    for idx, ex in enumerate(exercises):
-      st.markdown(f"**{idx + 1}. {ex}**")
-      c1, c2, c3 = st.columns(3)
-      wt = c1.number_input(
-          "Weight (kg)", min_value=0.0, step=1.25, key=f"{log_date}_{ex}_wt"
-      )
-      reps = c2.number_input(
-          "Reps", min_value=0, step=1, value=10, key=f"{log_date}_{ex}_rp"
-      )
-      sets = c3.number_input(
-          "Sets",
-          min_value=1,
-          max_value=6,
-          value=3,
-          key=f"{log_date}_{ex}_st",
-      )
-      session_data[ex] = {"weight": wt, "reps": reps, "sets": sets}
+  user_weight = float(profile.get("weight_kg", 74.8))
 
-    finisher = st.checkbox(
-        "Completed 15-20 min Incline Walk (15% @ 2.5 km/h)",
-        value=True,
-        key=f"{log_date}_finisher",
+  # Initialize dynamic set counts per exercise in session state
+  if "exercise_set_counts" not in st.session_state:
+    st.session_state.exercise_set_counts = {}
+
+  session_workout_data = {}
+  grand_total_volume = 0.0
+  grand_total_lift_cals = 0.0
+
+  for idx, ex in enumerate(exercises):
+    st.markdown(f"### {idx + 1}. {ex}")
+
+    # Default to 3 sets if not set
+    set_count_key = f"{log_date}_{ex}_count"
+    if set_count_key not in st.session_state.exercise_set_counts:
+      st.session_state.exercise_set_counts[set_count_key] = 3
+
+    current_sets = st.session_state.exercise_set_counts[set_count_key]
+
+    ctrl_col1, ctrl_col2, _ = st.columns([1, 1, 3])
+    with ctrl_col1:
+      if st.button(f"➕ Add Set", key=f"add_{ex}_{idx}"):
+        st.session_state.exercise_set_counts[set_count_key] += 1
+        st.rerun()
+    with ctrl_col2:
+      if (
+          st.button(f"➖ Remove Set", key=f"sub_{ex}_{idx}")
+          and current_sets > 1
+      ):
+        st.session_state.exercise_set_counts[set_count_key] -= 1
+        st.rerun()
+
+    ex_sets = []
+    ex_volume = 0.0
+    ex_cals = 0.0
+
+    # Table Header
+    hdr1, hdr2, hdr3, hdr4 = st.columns([1, 2, 2, 2])
+    hdr1.caption("Set #")
+    hdr2.caption("Weight (kg)")
+    hdr3.caption("Reps")
+    hdr4.caption("Set Load & Burn")
+
+    for s in range(1, current_sets + 1):
+      sc1, sc2, sc3, sc4 = st.columns([1, 2, 2, 2])
+      with sc1:
+        st.write(f"**Set {s}**")
+      with sc2:
+        s_wt = st.number_input(
+            f"Weight",
+            min_value=0.0,
+            step=1.25,
+            key=f"{log_date}_{ex}_s{s}_wt",
+            label_visibility="collapsed",
+        )
+      with sc3:
+        s_rp = st.number_input(
+            f"Reps",
+            min_value=0,
+            step=1,
+            value=10,
+            key=f"{log_date}_{ex}_s{s}_rp",
+            label_visibility="collapsed",
+        )
+
+      # Per-set volume & estimated kcal
+      set_vol = s_wt * s_rp
+      # Resistance training MET calculation: ~5.0 METs (~0.08 kcal/kg/min). ~45 sec set work + rest ~ 0.065 * weight * (reps/10)
+      set_kcal = round(
+          0.00085 * (s_wt + user_weight) * max(s_rp, 1)
+          + (0.025 * user_weight * 0.75),
+          1,
+      )
+
+      ex_volume += set_vol
+      ex_cals += set_kcal
+
+      with sc4:
+        st.markdown(
+            f"<span style='color:#58a6ff;'>{int(set_vol)} kg</span> | <span"
+            f" style='color:#3fb950;'>~{set_kcal} kcal</span>",
+            unsafe_allow_html=True,
+        )
+
+      ex_sets.append(
+          {"set": s, "weight": s_wt, "reps": s_rp, "volume": set_vol}
+      )
+
+    grand_total_volume += ex_volume
+    grand_total_lift_cals += ex_cals
+
+    st.markdown(
+        f"<div style='font-size: 0.85rem; color: #8b949e; text-align: right;'"
+        f">Exercise Total: <strong>{round(ex_volume, 1)} kg</strong> lifted |"
+        f" <strong>~{round(ex_cals, 1)} kcal</strong></div>",
+        unsafe_allow_html=True,
     )
-    if st.form_submit_button("💾 Save Workout"):
-      st.session_state.db.setdefault("workouts", {})[log_date] = {
-          "split": split_choice,
-          "exercises": session_data,
-          "finisher": finisher,
-      }
-      save_local_data(st.session_state.db)
-      st.success("Session saved locally!")
+    st.markdown(
+        "<hr style='border: 0.5px solid #21262d; margin: 12px 0;'>",
+        unsafe_allow_html=True,
+    )
+
+    session_workout_data[ex] = {
+        "sets": ex_sets,
+        "exercise_volume": ex_volume,
+        "exercise_kcal": ex_cals,
+    }
+
+  # Finisher
+  st.markdown("### 🔥 Finisher: Incline Cardio")
+  finisher_done = st.checkbox(
+      "Completed 15-20 min Incline Treadmill Walk (15% Incline @ 2.5 km/h)",
+      value=True,
+      key=f"{log_date}_finisher_val",
+  )
+
+  # Treadmill calorie burn: ~160 kcal for 20 mins at 15% incline @ 74.8 kg
+  cardio_cals = 160.0 if finisher_done else 0.0
+  total_session_cals = round(grand_total_lift_cals + cardio_cals, 1)
+
+  # Grand Totals Display
+  st.markdown("---")
+  st.subheader("🏁 Session Summary & Grand Totals")
+  g1, g2, g3 = st.columns(3)
+  g1.metric("Grand Total Weight Lifted", f"{round(grand_total_volume, 1)} kg")
+  g2.metric("Lifting Burn", f"~{round(grand_total_lift_cals, 1)} kcal")
+  g3.metric(
+      "Grand Total Calorie Burn (with Cardio)", f"~{total_session_cals} kcal"
+  )
+
+  if st.button("💾 Lock & Persist Workout Session", type="primary"):
+    st.session_state.db.setdefault("workouts", {})[log_date] = {
+        "split": split_choice,
+        "exercises": session_workout_data,
+        "grand_total_volume_kg": grand_total_volume,
+        "total_calories_burned": total_session_cals,
+        "finisher": finisher_done,
+    }
+    save_local_data(st.session_state.db)
+    st.success(
+        f"✅ Workout for {log_date} saved with {round(grand_total_volume, 1)} kg"
+        f" total volume and ~{total_session_cals} kcal burned!"
+    )
 
   st.markdown("---")
-  st.subheader("📋 Session Logs")
+  st.subheader("📋 Past Session Logs")
   if st.session_state.db.get("workouts"):
     for past_date, details in reversed(
         list(st.session_state.db["workouts"].items())
     ):
-      with st.expander(f"📁 {past_date} — {details['split']}"):
+      with st.expander(
+          f"📁 {past_date} — {details['split']} |"
+          f" {details.get('grand_total_volume_kg', 0)} kg |"
+          f" ~{details.get('total_calories_burned', 0)} kcal"
+      ):
         st.json(details)
 
 # ----------------- SECTION 4: CALORIE & MACRO AI -----------------
