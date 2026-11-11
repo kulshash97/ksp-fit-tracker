@@ -22,7 +22,7 @@ st.markdown(
     .metric-value { color: #58a6ff; font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .metric-subtext { color: #3fb950; font-size: 0.8rem; }
     .scan-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-top: 10px; }
-    .workout-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+    .split-badge { display: inline-block; padding: 4px 10px; background: #238636; color: #ffffff; border-radius: 16px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -48,7 +48,7 @@ def load_local_data():
           "visceral_level": 11,
           "target_kcal": 1533,
           "target_protein": 120,
-          "program_level": "Hypertrophy Deficit (3x8-12)",
+          "recommended_split": "Upper / Lower (Metabolic Density)",
       },
   }
 
@@ -71,38 +71,80 @@ profile = st.session_state.db.setdefault(
         "visceral_level": 11,
         "target_kcal": 1533,
         "target_protein": 120,
-        "program_level": "Hypertrophy Deficit (3x8-12)",
+        "recommended_split": "Upper / Lower (Metabolic Density)",
     },
 )
 
-# Standard Routines that dynamically adapt to InBody Phase
-PPL_ROUTINES = {
-    "Push Day (Chest, Shoulders & Triceps)": [
-        ("Flat Bench Press / Machine Chest Press", "barbell"),
-        ("Incline Dumbbell / Machine Press", "per_side"),
-        ("Pec Deck Flyes", "machine"),
-        ("Overhead Dumbbell Press", "per_side"),
-        ("Lateral Raises (Dumbbell/Cable)", "per_side"),
-        ("Triceps Pushdowns (Rope)", "machine"),
-    ],
-    "Pull Day (Back, Rear Delts & Biceps)": [
-        ("Lat Pulldown / Assisted Pull-Ups", "machine"),
-        ("Seated Cable Row / Machine Row", "machine"),
-        ("Single-Arm Dumbbell Row", "per_side"),
-        ("Straight-Arm Lat Pulldown", "machine"),
-        ("Dumbbell Biceps Curls", "per_side"),
-        ("Hammer Curls", "per_side"),
-    ],
-    "Leg Day (Quads, Hamstrings & Calves)": [
-        ("Barbell Squat / Leg Press", "barbell"),
-        ("Romanian Deadlifts (RDLs)", "barbell"),
-        ("Bulgarian Split Squats / Lunges", "per_side"),
-        ("Leg Extensions", "machine"),
-        ("Standing Calf Raises", "machine"),
-    ],
+# Adaptive Routine Library Driven by Body Composition
+WORKOUT_SYSTEMS = {
+    "Upper / Lower (Metabolic Density - Optimal for BF > 25%)": {
+        "Upper Power & Density": [
+            ("Flat Bench Press / Machine Chest Press", "barbell"),
+            ("Lat Pulldown / Assisted Pull-Ups", "machine"),
+            ("Incline Dumbbell Press", "per_side"),
+            ("Seated Cable Row", "machine"),
+            ("Standing Dumbbell Lateral Raises", "per_side"),
+            ("Rope Triceps Pushdowns", "machine"),
+            ("Dumbbell Biceps Curls", "per_side"),
+        ],
+        "Lower Compound & Posterior Chain": [
+            ("Barbell Squat / Heavy Leg Press", "barbell"),
+            ("Romanian Deadlifts (RDLs)", "barbell"),
+            ("Walking Lunges / Bulgarian Split Squats", "per_side"),
+            ("Leg Curl / Leg Extension Superset", "machine"),
+            ("Standing Calf Raises", "machine"),
+            ("Hanging Leg Raises / Core Hollow Hold", "bodyweight"),
+        ],
+    },
+    "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)": {
+        "Push Day (Chest, Shoulders & Triceps)": [
+            ("Flat Bench Press / Machine Chest Press", "barbell"),
+            ("Incline Dumbbell / Machine Press", "per_side"),
+            ("Pec Deck Flyes", "machine"),
+            ("Overhead Dumbbell Press", "per_side"),
+            ("Lateral Raises (Dumbbell/Cable)", "per_side"),
+            ("Triceps Pushdowns (Rope)", "machine"),
+        ],
+        "Pull Day (Back, Rear Delts & Biceps)": [
+            ("Lat Pulldown / Assisted Pull-Ups", "machine"),
+            ("Seated Cable Row / Machine Row", "machine"),
+            ("Single-Arm Dumbbell Row", "per_side"),
+            ("Straight-Arm Lat Pulldown", "machine"),
+            ("Dumbbell Biceps Curls", "per_side"),
+            ("Hammer Curls", "per_side"),
+        ],
+        "Leg Day (Quads, Hamstrings & Calves)": [
+            ("Barbell Squat / Leg Press", "barbell"),
+            ("Romanian Deadlifts (RDLs)", "barbell"),
+            ("Bulgarian Split Squats / Lunges", "per_side"),
+            ("Leg Extensions", "machine"),
+            ("Standing Calf Raises", "machine"),
+        ],
+    },
+    "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)": {
+        "Chest & Back": [
+            ("Barbell Incline Bench Press", "barbell"),
+            ("Barbell Bent-Over Row", "barbell"),
+            ("Dumbbell Flat Bench Press", "per_side"),
+            ("Weighted or Lat Pulldowns", "machine"),
+            ("Cable Dumbbell Flyes", "per_side"),
+        ],
+        "Shoulders & Arms": [
+            ("Seated Dumbbell Overhead Press", "per_side"),
+            ("Lateral Raises Heavy Drop-Set", "per_side"),
+            ("Barbell Biceps Curls", "barbell"),
+            ("Skull Crushers / Overhead Triceps Extension", "barbell"),
+            ("Incline Hammer Curls", "per_side"),
+        ],
+        "Legs & Abs": [
+            ("Barbell Back Squats", "barbell"),
+            ("Romanian Deadlifts", "barbell"),
+            ("Leg Press Heavy Volume", "barbell"),
+            ("Calf Raises & Cable Crunches", "machine"),
+        ],
+    },
 }
 
-# Exhaustive Calorie & Macro DB including Indian staples & fruits
 FOOD_REGISTRY = {
     "banana": {
         "calories": 89,
@@ -153,13 +195,6 @@ FOOD_REGISTRY = {
         "fat": 1.5,
         "unit": "1 scoop (33g)",
     },
-    "whey protein": {
-        "calories": 125,
-        "protein": 24.0,
-        "carbs": 3.0,
-        "fat": 1.8,
-        "unit": "1 scoop (33g)",
-    },
     "besan chilla": {
         "calories": 180,
         "protein": 8.0,
@@ -202,95 +237,113 @@ FOOD_REGISTRY = {
         "fat": 6.9,
         "unit": "100g",
     },
-    "peanut butter": {
-        "calories": 588,
-        "protein": 25.0,
-        "carbs": 20.0,
-        "fat": 50.0,
-        "unit": "100g (approx 32g/tbsp)",
-    },
 }
 
 
-# PDF Generator Helper
+# High-Contrast Professional PDF Generator
 def generate_workout_pdf(log_date, workout_data):
-  pdf = FPDF()
+  pdf = FPDF(orientation="P", unit="mm", format="A4")
+  pdf.set_auto_page_break(auto=True, margin=15)
   pdf.add_page()
+
+  # Clean dark header banner
   pdf.set_fill_color(22, 27, 34)
-  pdf.set_text_color(240, 246, 252)
+  pdf.rect(0, 0, 210, 32, "F")
 
-  # Title Header
+  pdf.set_text_color(88, 166, 255)
   pdf.set_font("Helvetica", "B", 16)
-  pdf.cell(
-      0,
-      12,
-      f"KSP FITNESS OS - WORKOUT SUMMARY ({log_date})",
-      ln=True,
-      align="C",
-  )
-  pdf.ln(4)
+  pdf.set_xy(10, 8)
+  pdf.cell(190, 8, "KSP FITNESS OS - PERFORMANCE LOG", ln=True, align="C")
 
-  # Overview Details
-  pdf.set_font("Helvetica", "", 11)
-  pdf.cell(0, 8, f"Program Split: {workout_data.get('split', 'PPL')}", ln=True)
-  pdf.cell(
-      0,
-      8,
-      f"Total Weight Lifted: {workout_data.get('grand_total_volume_kg', 0)} kg",
-      ln=True,
+  pdf.set_text_color(200, 200, 200)
+  pdf.set_font("Helvetica", "", 10)
+  pdf.cell(190, 6, f"Session Date: {log_date}", ln=True, align="C")
+  pdf.ln(12)
+
+  # Overview Metrics
+  pdf.set_text_color(20, 20, 20)
+  pdf.set_font("Helvetica", "B", 11)
+  pdf.cell(0, 7, f"Program Split: {workout_data.get('split', 'PPL')}", ln=True)
+
+  grand_vol = workout_data.get(
+      "grand_total_volume_kg", workout_data.get("grand_total_volume", 0)
   )
-  pdf.cell(
-      0,
-      8,
-      f"Total Calories Burned: ~{workout_data.get('total_calories_burned', 0)}"
-      " kcal",
-      ln=True,
+  cals_burned = workout_data.get(
+      "total_calories_burned", workout_data.get("total_calories", 0)
   )
-  finisher_status = (
-      "Completed (15% Incline @ 2.5 km/h)"
+
+  pdf.cell(0, 7, f"Total Weight Lifted (Tonnage): {grand_vol} kg", ln=True)
+  pdf.cell(0, 7, f"Total Calorie Burn (with Cardio): ~{cals_burned} kcal", ln=True)
+  finisher_txt = (
+      "15-20 min Incline Walk (15% @ 2.5 km/h) - COMPLETED"
       if workout_data.get("finisher")
       else "Skipped"
   )
-  pdf.cell(0, 8, f"Cardio Finisher: {finisher_status}", ln=True)
+  pdf.cell(0, 7, f"Cardio Finisher: {finisher_txt}", ln=True)
   pdf.ln(4)
+
+  # Divider Line
+  pdf.set_draw_color(200, 200, 200)
+  pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+  pdf.ln(5)
 
   # Exercises Table
   pdf.set_font("Helvetica", "B", 12)
-  pdf.cell(0, 8, "EXERCISE BREAKDOWN", ln=True)
-  pdf.set_font("Helvetica", "", 10)
+  pdf.set_text_color(10, 10, 10)
+  pdf.cell(0, 8, "DETAILED EXERCISE LOG", ln=True)
+  pdf.ln(2)
 
   for ex_name, details in workout_data.get("exercises", {}).items():
+    ex_vol = details.get("exercise_volume", 0)
+    ex_kc = details.get("exercise_kcal", 0)
+
+    # Exercise Box Header
+    pdf.set_fill_color(240, 242, 245)
     pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(0, 51, 102)
     pdf.cell(
-        0,
+        190,
         7,
-        f"> {ex_name}  [Volume: {details['exercise_volume']} kg | Burn:"
-        f" ~{details['exercise_kcal']} kcal]",
+        f"  {ex_name}  |  Volume: {ex_vol} kg  |  Burn: ~{ex_kc} kcal",
+        border=1,
         ln=True,
+        fill=True,
     )
+
+    # Set Details
     pdf.set_font("Helvetica", "", 9)
-    for s in details.get("sets", []):
-      calc_note = s.get("calc_type", "")
-      pdf.cell(
-          0,
-          5,
-          f"    Set {s['set']}: {s['total_weight']} kg total ({s['reps']} reps)"
-          f" - Load: {s['volume']} kg - {calc_note}",
-          ln=True,
-      )
-    pdf.ln(2)
+    pdf.set_text_color(40, 40, 40)
+    sets_list = details.get("sets", [])
+
+    if isinstance(sets_list, list):
+      for s in sets_list:
+        set_num = s.get("set", 1)
+        tot_wt = s.get("total_weight", s.get("weight", 0.0))
+        reps = s.get("reps", 0)
+        vol = s.get("volume", tot_wt * reps)
+        calc = s.get("calc_type", f"{tot_wt}kg")
+        pdf.cell(
+            190,
+            6,
+            f"      Set {set_num}: {tot_wt} kg total ({reps} reps)  ->  Load:"
+            f" {vol} kg  [{calc}]",
+            border="LR",
+            ln=True,
+        )
+      pdf.cell(190, 1, "", border="T", ln=True)
+    pdf.ln(3)
 
   return bytes(pdf.output())
 
 
-# Sidebar Navigation
+# Sidebar
 st.sidebar.markdown("## ⚡ KSP Fitness OS")
 menu = st.sidebar.radio(
     "Navigation",
     [
         "📊 Dashboard & BMI",
         "📑 InBody & Body Composition",
-        "🏋️ PPL Workout Logger",
+        "🏋️ Adaptive Workout Logger",
         "🥗 Calorie & Macro AI",
     ],
 )
@@ -312,7 +365,7 @@ if menu == "📊 Dashboard & BMI":
       f"""<div class="metric-card">
         <div class="metric-title">Daily Protein</div>
         <div class="metric-value">{profile.get('target_protein', 120)}g</div>
-        <div class="metric-subtext">Muscle Preservation Target</div>
+        <div class="metric-subtext">Lean Muscle Preservation</div>
     </div>""",
       unsafe_allow_html=True,
   )
@@ -326,9 +379,9 @@ if menu == "📊 Dashboard & BMI":
   )
   c4.markdown(
       f"""<div class="metric-card">
-        <div class="metric-title">Active Program</div>
-        <div class="metric-value" style="font-size: 1.15rem; margin-top: 10px;">{profile.get('program_level', 'Hypertrophy Deficit')}</div>
-        <div class="metric-subtext">InBody Synced</div>
+        <div class="metric-title">InBody Plan</div>
+        <div class="metric-value" style="font-size: 1.05rem; margin-top: 10px;">{profile.get('recommended_split', 'Upper / Lower')}</div>
+        <div class="metric-subtext">Body Fat Synced</div>
     </div>""",
       unsafe_allow_html=True,
   )
@@ -367,23 +420,20 @@ if menu == "📊 Dashboard & BMI":
             <div style="font-size: 0.9rem; color: #8b949e;">Calculated Body Mass Index (BMI)</div>
             <div style="font-size: 2.2rem; font-weight: bold; color: {col};">{bmi} kg/m²</div>
             <div style="font-size: 1rem; color: #e6edf3;">Classification: <strong>{cat}</strong></div>
-            <div style="font-size: 0.85rem; color: #8b949e; margin-top: 6px;">
-                Note: InBody biometrics supersede generic BMI calculations.
-            </div>
         </div>""",
           unsafe_allow_html=True,
       )
 
 # ------------ SECTION 2: INBODY & BODY COMPOSITION ------------
 elif menu == "📑 InBody & Body Composition":
-  st.title("📑 InBody / DEXA & Visual Composition Engine")
+  st.title("📑 InBody / DEXA & Body Composition Engine")
   st.markdown(
-      "Sync your latest body scan or physique photos to automatically adjust"
-      " your calorie deficit, protein floor, and workout rep schemes."
+      "Sync your biometrics to dynamically recalibrate your training split"
+      " structure and daily nutritional targets."
   )
 
   tab_scan, tab_photo = st.tabs(
-      ["📊 InBody / DEXA Report Calibrator", "📸 Visual Body Fat Estimator"]
+      ["📊 InBody / DEXA Recalibrator", "📸 Visual Body Fat Estimator"]
   )
 
   with tab_scan:
@@ -394,7 +444,7 @@ elif menu == "📑 InBody & Body Composition":
         key="inbody_upload",
     )
     if scan_file:
-      st.success("Report attached! Metrics auto-calibrated below:")
+      st.success("Report attached! Review metrics below:")
 
     sc1, sc2, sc3, sc4 = st.columns(4)
     with sc1:
@@ -422,7 +472,7 @@ elif menu == "📑 InBody & Body Composition":
           step=1,
       )
 
-    if st.button("🚀 Recalibrate App & Workout Plan"):
+    if st.button("🚀 Recalibrate App & Workout Split", type="primary"):
       lean_mass = scan_weight * (1.0 - (scan_bfp / 100.0))
       recommended_protein = max(int(round(lean_mass * 2.2)), 120)
 
@@ -430,15 +480,19 @@ elif menu == "📑 InBody & Body Composition":
       tdee = bmr * 1.35
       caloric_deficit = int(round(tdee - 450))
 
-      # Dynamic Workout Scheme Adjustment based on scan
-      if scan_bfp > 28.0:
-        recommended_program = (
-            "Fat-Loss Density PPL (3x10-12 Reps + 15% Incline Walk)"
+      # Body Fat Responsive Split Assignment
+      if scan_bfp > 25.0:
+        recommended_split = (
+            "Upper / Lower (Metabolic Density - Optimal for BF > 25%)"
         )
-      elif scan_bfp > 20.0:
-        recommended_program = "Recomp Hypertrophy (3x8-10 Reps, Progressive)"
+      elif scan_bfp >= 18.0:
+        recommended_split = (
+            "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)"
+        )
       else:
-        recommended_program = "Lean Mass Builder (4x6-8 Reps Heavy)"
+        recommended_split = (
+            "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)"
+        )
 
       profile["weight_kg"] = scan_weight
       profile["smm_kg"] = scan_smm
@@ -446,23 +500,24 @@ elif menu == "📑 InBody & Body Composition":
       profile["visceral_level"] = scan_vfl
       profile["target_kcal"] = caloric_deficit
       profile["target_protein"] = recommended_protein
-      profile["program_level"] = recommended_program
+      profile["recommended_split"] = recommended_split
       save_local_data(st.session_state.db)
 
-      st.success("✅ App & Workouts Fully Synchronized with your InBody Scan!")
+      st.success("✅ Training & Diet Protocols Recalibrated Successfully!")
 
       r1, r2, r3 = st.columns(3)
-      r1.metric("Recalibrated Daily Calories", f"{caloric_deficit} kcal")
-      r2.metric("Target Protein (Pure Veg)", f"{recommended_protein}g / day")
+      r1.metric("Target Daily Calories", f"{caloric_deficit} kcal")
+      r2.metric("Target Protein (Veg)", f"{recommended_protein}g / day")
       r3.metric("Lean Muscle Mass (LBM)", f"{round(lean_mass, 1)} kg")
 
       st.markdown(
           f"""<div class="scan-card">
-            <h4>📋 Program Synchronized: {recommended_program}</h4>
+            <h4>📋 System Prescription</h4>
+            <div class="split-badge">Recommended: {recommended_split}</div>
             <ul>
-                <li><strong>Visceral Fat Level ({scan_vfl}):</strong> 15% Incline walk post-lifting prioritized for visceral lipid reduction.</li>
+                <li><strong>Visceral Fat Level ({scan_vfl}):</strong> 15% incline treadmill walking for 20 mins is mandatory post-lift to induce visceral fat oxidation.</li>
                 <li><strong>Skeletal Muscle ({scan_smm} kg):</strong> 3 heavy working sets kept at RPE 8.5 to prevent catabolism in a caloric deficit.</li>
-                <li><strong>Macro Protocol:</strong> {recommended_protein}g protein locked in (soya chunks, curd, paneer, pea protein).</li>
+                <li><strong>Macro Targets:</strong> {recommended_protein}g protein locked in (soya chunks, curd, paneer, pea protein).</li>
             </ul>
         </div>""",
           unsafe_allow_html=True,
@@ -486,23 +541,33 @@ elif menu == "📑 InBody & Body Composition":
           unsafe_allow_html=True,
       )
 
-# ------------ SECTION 3: PPL WORKOUT LOGGER (EACH SIDE WEIGHT CALCULATION + PDF) ------------
-elif menu == "🏋️ PPL Workout Logger":
-  st.title("🏋️ Progressive Overload Logger")
-  st.markdown(
-      "Select your training split. Enter **Each Side Weight** (app calculates"
-      " total barbell/dumbbell load automatically) and download clean PDF"
-      " reports."
-  )
+# ------------ SECTION 3: ADAPTIVE WORKOUT LOGGER (BODY FAT DRIVEN + RELIABLE PDF) ------------
+elif menu == "🏋️ Adaptive Workout Logger":
+  st.title("🏋️ Adaptive Workout & Multi-Set Logger")
 
-  w1, w2 = st.columns([2, 1])
-  with w1:
-    split_choice = st.selectbox("Select Training Day", list(PPL_ROUTINES.keys()))
-  with w2:
-    session_date = st.date_input("Workout Date", value=date.today())
+  system_keys = list(WORKOUT_SYSTEMS.keys())
+  default_sys_idx = 0
+  saved_rec = profile.get("recommended_split", system_keys[0])
+  for i, k in enumerate(system_keys):
+    if k == saved_rec:
+      default_sys_idx = i
+      break
+
+  col_sys, col_day, col_date = st.columns([2, 2, 1])
+  with col_sys:
+    chosen_system = st.selectbox(
+        "Training System (Auto-Suggested by Body Fat)",
+        system_keys,
+        index=default_sys_idx,
+    )
+  with col_day:
+    available_days = list(WORKOUT_SYSTEMS[chosen_system].keys())
+    split_choice = st.selectbox("Select Workout Day", available_days)
+  with col_date:
+    session_date = st.date_input("Date", value=date.today())
     log_date = session_date.strftime("%Y-%m-%d")
 
-  exercises = PPL_ROUTINES[split_choice]
+  exercises = WORKOUT_SYSTEMS[chosen_system][split_choice]
   user_weight = float(profile.get("weight_kg", 74.8))
 
   if "exercise_set_counts" not in st.session_state:
@@ -581,9 +646,7 @@ elif menu == "🏋️ PPL Workout Logger":
             label_visibility="collapsed",
         )
 
-      # Automatic total calculation:
       if "Each Side" in calc_mode:
-        # Total = (Each side * 2) + 20kg bar
         effective_total_wt = (input_wt * 2) + 20.0 if input_wt > 0 else 0.0
         calc_note = f"({input_wt}kg x 2) + 20kg bar"
       else:
@@ -591,7 +654,6 @@ elif menu == "🏋️ PPL Workout Logger":
         calc_note = f"{input_wt}kg"
 
       set_vol = effective_total_wt * s_rp
-      # Calibrated resistance training MET expenditure (intra-set + EPOC rest)
       set_kcal = (
           round((0.14 * user_weight) + (0.0022 * set_vol), 1)
           if effective_total_wt > 0 and s_rp > 0
@@ -634,8 +696,8 @@ elif menu == "🏋️ PPL Workout Logger":
 
     session_workout_data[ex] = {
         "sets": ex_sets,
-        "exercise_volume": ex_volume,
-        "exercise_kcal": ex_cals,
+        "exercise_volume": round(ex_volume, 1),
+        "exercise_kcal": round(ex_cals, 1),
     }
 
   # Incline Cardio Finisher
@@ -660,9 +722,9 @@ elif menu == "🏋️ PPL Workout Logger":
 
   if st.button("💾 Lock & Persist Workout Session", type="primary"):
     current_session = {
-        "split": split_choice,
+        "split": f"{chosen_system} - {split_choice}",
         "exercises": session_workout_data,
-        "grand_total_volume_kg": grand_total_volume,
+        "grand_total_volume_kg": round(grand_total_volume, 1),
         "total_calories_burned": total_session_cals,
         "finisher": finisher_done,
     }
@@ -670,7 +732,7 @@ elif menu == "🏋️ PPL Workout Logger":
     save_local_data(st.session_state.db)
     st.success(f"✅ Workout for {log_date} successfully logged and locked!")
 
-  # PDF Download Feature (Zero JSON Hassle)
+  # High-Contrast Safe PDF Generation
   st.markdown("---")
   st.subheader("📄 Export Clean Workout Report (PDF)")
   if log_date in st.session_state.db.get("workouts", {}):
@@ -686,12 +748,12 @@ elif menu == "🏋️ PPL Workout Logger":
   else:
     st.caption("Lock your session above to download the PDF report.")
 
-# ----------------- SECTION 4: CALORIE & MACRO AI (INTELLIGENT RECOGNITION) -----------------
+# ----------------- SECTION 4: CALORIE & MACRO AI -----------------
 elif menu == "🥗 Calorie & Macro AI":
   st.title("🥗 Fast Calorie & Macro AI")
   st.markdown(
-      "Instant nutritional breakdown for everyday foods and fruits (e.g.,"
-      " Banana, Soya, Curd, Rice) via smart text search or photo upload."
+      "Instant nutritional breakdown for everyday foods and fruits via smart"
+      " text search or photo upload."
   )
 
   tab1, tab2 = st.tabs(["🔍 Search Food", "📷 Label / Meal Photo"])
@@ -719,10 +781,7 @@ elif menu == "🥗 Calorie & Macro AI":
         m4.metric("Fat", f"{round(matched['fat'] * mult, 1)} g")
         st.info(f"Target matched: **{search_query.title()}** ({matched['unit']})")
       else:
-        st.warning(
-            f"Item '{search_query}' not recognized in standard list. Using"
-            " generic clean meal benchmark."
-        )
+        st.warning(f"Item '{search_query}' not recognized in standard list.")
 
   with tab2:
     st.markdown("Upload any food or fruit photo (Banana, Apple, Meal Plate):")
@@ -733,7 +792,6 @@ elif menu == "🥗 Calorie & Macro AI":
       st.image(Image.open(img_file), width=320)
       filename_lower = img_file.name.lower()
 
-      # Auto-detection heuristic from common camera/file patterns
       detected_food = None
       for food_key in FOOD_REGISTRY:
         if food_key in filename_lower:
@@ -741,7 +799,6 @@ elif menu == "🥗 Calorie & Macro AI":
           break
 
       if not detected_food:
-        # Default smart inference for fruit / single item upload
         detected_food = "banana"
 
       item_info = FOOD_REGISTRY[detected_food]
