@@ -33,6 +33,36 @@ st.markdown("""
 
 DATA_FILE = "fitness_os_data.json"
 
+def clean_pdf_str(text):
+    """Sanitize strings for standard FPDF Latin-1 fonts without crashing on rupee or arrows."""
+    if not isinstance(text, str):
+        text = str(text)
+    replacements = {
+        "₹": "Rs.",
+        "→": "->",
+        "•": "-",
+        "—": "-",
+        "–": "-",
+        "“": '"',
+        "”": '"',
+        "’": "'",
+        "‘": "'",
+        "⚡": "",
+        "🥗": "",
+        "🏋️": "",
+        "📊": "",
+        "📑": "",
+        "🔍": "",
+        "🌅": "",
+        "☀️": "",
+        "🌙": "",
+        "💡": ""
+    }
+    for orig, rep in replacements.items():
+        text = text.replace(orig, rep)
+    # Strip any remaining unencodable characters
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
 def load_local_data():
     if os.path.exists(DATA_FILE):
         try:
@@ -207,7 +237,7 @@ def analyze_food_universally(text_query=None, pil_image=None):
         except Exception:
             pass
 
-    # Reliable Offline Parser fallback
+    # Offline fallback
     q = (text_query or "").lower()
     count_m = re.search(r"^(\d+(\.\d+)?)", q)
     qty = float(count_m.group(1)) if count_m else 1.0
@@ -271,24 +301,24 @@ def build_pdf_document(log_date, workout_data):
     pdf.set_text_color(88, 166, 255)
     pdf.set_font('Helvetica', 'B', 15)
     pdf.set_xy(10, 8)
-    pdf.cell(190, 8, "KSP FITNESS OS - PERFORMANCE WORKOUT LOG", ln=True, align='C')
+    pdf.cell(190, 8, clean_pdf_str("KSP FITNESS OS - PERFORMANCE WORKOUT LOG"), ln=True, align='C')
     
     pdf.set_text_color(200, 200, 200)
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(190, 6, f"Session Date: {log_date}", ln=True, align='C')
+    pdf.cell(190, 6, clean_pdf_str(f"Session Date: {log_date}"), ln=True, align='C')
     pdf.ln(12)
     
     pdf.set_text_color(20, 20, 20)
     pdf.set_font('Helvetica', 'B', 11)
-    pdf.cell(0, 7, f"Program Split: {workout_data.get('split', 'PPL')}", ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Program Split: {workout_data.get('split', 'PPL')}"), ln=True)
     
     grand_vol = workout_data.get('grand_total_volume_kg', workout_data.get('grand_total_volume', 0))
     cals_burned = workout_data.get('total_calories_burned', workout_data.get('total_calories', 0))
     
-    pdf.cell(0, 7, f"Total Weight Lifted (Tonnage): {grand_vol} kg", ln=True)
-    pdf.cell(0, 7, f"Total Calorie Burn (with Cardio): ~{cals_burned} kcal", ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Weight Lifted (Tonnage): {grand_vol} kg"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Calorie Burn (with Cardio): ~{cals_burned} kcal"), ln=True)
     finisher_txt = "15-20 min Incline Walk (15% @ 2.5 km/h) - COMPLETED" if workout_data.get('finisher') else "Skipped"
-    pdf.cell(0, 7, f"Cardio Finisher: {finisher_txt}", ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Cardio Finisher: {finisher_txt}"), ln=True)
     pdf.ln(4)
     
     pdf.set_draw_color(200, 200, 200)
@@ -297,7 +327,7 @@ def build_pdf_document(log_date, workout_data):
     
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(10, 10, 10)
-    pdf.cell(0, 8, "DETAILED EXERCISE LOG", ln=True)
+    pdf.cell(0, 8, clean_pdf_str("DETAILED EXERCISE LOG"), ln=True)
     pdf.ln(2)
     
     for ex_name, details in workout_data.get('exercises', {}).items():
@@ -307,7 +337,7 @@ def build_pdf_document(log_date, workout_data):
         pdf.set_fill_color(240, 242, 245)
         pdf.set_font('Helvetica', 'B', 10)
         pdf.set_text_color(0, 51, 102)
-        pdf.cell(190, 7, f"  {ex_name}  |  Volume: {ex_vol} kg  |  Burn: ~{ex_kc} kcal", border=1, ln=True, fill=True)
+        pdf.cell(190, 7, clean_pdf_str(f"  {ex_name}  |  Volume: {ex_vol} kg  |  Burn: ~{ex_kc} kcal"), border=1, ln=True, fill=True)
         
         pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(40, 40, 40)
@@ -320,13 +350,13 @@ def build_pdf_document(log_date, workout_data):
                 reps = s.get('reps', 0)
                 vol = s.get('volume', tot_wt * reps)
                 calc = s.get('calc_type', f"{tot_wt}kg")
-                pdf.cell(190, 6, f"      Set {set_num}: {tot_wt} kg total ({reps} reps)  ->  Load: {vol} kg  [{calc}]", border='LR', ln=True)
+                pdf.cell(190, 6, clean_pdf_str(f"      Set {set_num}: {tot_wt} kg total ({reps} reps) -> Load: {vol} kg [{calc}]"), border='LR', ln=True)
             pdf.cell(190, 1, '', border='T', ln=True)
         pdf.ln(3)
         
     return bytes(pdf.output())
 
-# PDF Diet & Grocery Builder
+# PDF Diet & Grocery Builder with Unicode-safe strings
 def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -338,18 +368,18 @@ def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf.set_text_color(88, 166, 255)
     pdf.set_font('Helvetica', 'B', 15)
     pdf.set_xy(10, 8)
-    pdf.cell(190, 8, "KSP FITNESS OS - 30-DAY BUDGET & MEAL ARCHITECT", ln=True, align='C')
+    pdf.cell(190, 8, clean_pdf_str("KSP FITNESS OS - 30-DAY BUDGET & MEAL ARCHITECT"), ln=True, align='C')
     
     pdf.set_text_color(200, 200, 200)
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(190, 6, f"Preference: {diet_pref} | Tier: {tier_choice}", ln=True, align='C')
+    pdf.cell(190, 6, clean_pdf_str(f"Preference: {diet_pref} | Tier: {tier_choice}"), ln=True, align='C')
     pdf.ln(12)
     
     pdf.set_text_color(20, 20, 20)
     pdf.set_font('Helvetica', 'B', 11)
-    pdf.cell(0, 7, f"Target Daily Calorie Ceiling: {profile_data.get('target_kcal', 1533)} kcal", ln=True)
-    pdf.cell(0, 7, f"Target Daily Protein Floor: {profile_data.get('target_protein', 120)} g/day", ln=True)
-    pdf.cell(0, 7, f"Current Weight: {profile_data.get('weight_kg', 74.8)} kg | Body Fat: {profile_data.get('body_fat_pct', 32.0)}%", ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Calorie Ceiling: {profile_data.get('target_kcal', 1533)} kcal"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Protein Floor: {profile_data.get('target_protein', 120)} g/day"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Current Weight: {profile_data.get('weight_kg', 74.8)} kg | Body Fat: {profile_data.get('body_fat_pct', 32.0)}%"), ln=True)
     pdf.ln(4)
     
     pdf.set_draw_color(200, 200, 200)
@@ -357,53 +387,53 @@ def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf.ln(5)
     
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(0, 8, "ESTIMATED 30-DAY GROCERY HAUL & BUDGET", ln=True)
+    pdf.cell(0, 8, clean_pdf_str("ESTIMATED 30-DAY GROCERY HAUL & BUDGET"), ln=True)
     pdf.set_font('Helvetica', '', 10)
     
     if "Tier 1" in tier_choice:
         groceries = [
-            ("Soya Chunks (Raw Bulk)", "2.0 kg", "Rs 220", "52g protein / 100g"),
-            ("Chana Sattu Powder", "1.5 kg", "Rs 210", "20g protein / 100g"),
-            ("Fresh Curd / Dahi Setup", "6.0 kg (Milk/Dahi)", "Rs 380", "15g protein / day"),
-            ("Roasted Bengal Gram (Chana)", "1.0 kg", "Rs 140", "Intra-day fiber & protein"),
-            ("Moong Dal for Sprouts/Chilla", "2.0 kg", "Rs 260", "24g protein / 100g raw"),
-            ("Seasonal Veggies & Bananas", "Monthly", "Rs 600", "Potassium & fiber"),
+            ("Soya Chunks (Raw Bulk)", "2.0 kg", "Rs. 220", "52g protein / 100g"),
+            ("Chana Sattu Powder", "1.5 kg", "Rs. 210", "20g protein / 100g"),
+            ("Fresh Curd / Dahi Setup", "6.0 kg (Milk/Dahi)", "Rs. 380", "15g protein / day"),
+            ("Roasted Bengal Gram (Chana)", "1.0 kg", "Rs. 140", "Intra-day fiber & protein"),
+            ("Moong Dal for Sprouts/Chilla", "2.0 kg", "Rs. 260", "24g protein / 100g raw"),
+            ("Seasonal Veggies & Bananas", "Monthly", "Rs. 600", "Potassium & fiber"),
         ]
-        est_cost = "Rs 1,810 - Rs 2,200 / month"
+        est_cost = "Rs. 1,810 - Rs. 2,200 / month"
     elif "Tier 2" in tier_choice:
         groceries = [
-            ("Low-Fat Paneer", "4.0 kg", "Rs 1,400", "18g protein / 100g"),
-            ("Pea / Plant Protein Powder", "1 Tub (1kg)", "Rs 1,600", "25g protein / scoop"),
-            ("Soya Chunks / Sprouts Mix", "1.5 kg", "Rs 200", "Secondary clean bulk"),
-            ("Rolled Oats & Peanut Butter", "1kg + 500g", "Rs 550", "Complex carbs & healthy fats"),
-            ("Fresh Curd & Seasonal Greens", "Monthly", "Rs 800", "Gut microbiome & micronutrients"),
+            ("Low-Fat Paneer", "4.0 kg", "Rs. 1,400", "18g protein / 100g"),
+            ("Pea / Plant Protein Powder", "1 Tub (1kg)", "Rs. 1,600", "25g protein / scoop"),
+            ("Soya Chunks / Sprouts Mix", "1.5 kg", "Rs. 200", "Secondary clean bulk"),
+            ("Rolled Oats & Peanut Butter", "1kg + 500g", "Rs. 550", "Complex carbs & healthy fats"),
+            ("Fresh Curd & Seasonal Greens", "Monthly", "Rs. 800", "Gut microbiome & micronutrients"),
         ]
-        est_cost = "Rs 4,200 - Rs 4,800 / month"
+        est_cost = "Rs. 4,200 - Rs. 4,800 / month"
     else:
         groceries = [
-            ("Whey Protein Isolate", "1 Tub (2kg)", "Rs 5,400", "27g protein / scoop isolate"),
-            ("Artisanal Tofu & Fresh Paneer", "5.0 kg", "Rs 2,200", "Clean bioavailability"),
-            ("Greek Yogurt & Berries", "Monthly", "Rs 1,800", "Probiotics & polyphenols"),
-            ("Almond Butter & Chia Seeds", "Monthly", "Rs 1,100", "Omega-3 & healthy fats"),
+            ("Whey Protein Isolate", "1 Tub (2kg)", "Rs. 5,400", "27g protein / scoop isolate"),
+            ("Artisanal Tofu & Fresh Paneer", "5.0 kg", "Rs. 2,200", "Clean bioavailability"),
+            ("Greek Yogurt & Berries", "Monthly", "Rs. 1,800", "Probiotics & polyphenols"),
+            ("Almond Butter & Chia Seeds", "Monthly", "Rs. 1,100", "Omega-3 & healthy fats"),
         ]
-        est_cost = "Rs 8,500 - Rs 10,500 / month"
+        est_cost = "Rs. 8,500 - Rs. 10,500 / month"
 
     for itm, qty, prc, note in groceries:
-        pdf.cell(190, 6, f"  - {itm} [{qty}] -> {prc} ({note})", ln=True)
+        pdf.cell(190, 6, clean_pdf_str(f"  - {itm} [{qty}] -> {prc} ({note})"), ln=True)
         
     pdf.ln(3)
     pdf.set_font('Helvetica', 'B', 11)
-    pdf.cell(0, 7, f"Total Estimated Monthly Food Investment: {est_cost}", ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Estimated Monthly Food Investment: {est_cost}"), ln=True)
     pdf.ln(4)
     
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(0, 8, "TACTICAL 10-MINUTE RECIPES", ln=True)
+    pdf.cell(0, 8, clean_pdf_str("TACTICAL 10-MINUTE RECIPES"), ln=True)
     pdf.set_font('Helvetica', '', 9)
-    pdf.multi_cell(190, 5, 
-        "1. 10-Min Soya Bhurji: Boil 60g soya chunks for 5 mins in salted water. Squeeze water out completely and pulse in mixer for 3 seconds. Saute with 1 chopped green chilli, pinch of turmeric, salt, and 1 tsp mustard oil. Yields 31g protein for under Rs 8.\n\n"
+    pdf.multi_cell(190, 5, clean_pdf_str(
+        "1. 10-Min Soya Bhurji: Boil 60g soya chunks for 5 mins in salted water. Squeeze water out completely and pulse in mixer for 3 seconds. Saute with 1 chopped green chilli, pinch of turmeric, salt, and 1 tsp mustard oil. Yields 31g protein for under Rs. 8.\n\n"
         "2. High-Protein Sattu Chhas: Mix 40g sattu in 250ml chilled water or thin buttermilk. Add roasted cumin, black salt, and lemon. Drink post-workout for 10g protein and instant mineral rehydration.\n\n"
         "3. Instant Moong Sprout Salad: Toss 100g sprouted moong with cucumber, tomato, chaat masala, lemon, and 30g roasted chana. High satiety volume meal."
-    )
+    ))
     
     return bytes(pdf.output())
 
@@ -542,7 +572,7 @@ elif menu == "📑 InBody & Body Composition":
                 <p><strong>Structure:</strong> Strong shoulder girdle and chest frame. Waist taper will emerge rapidly once visceral fat levels drop below 9.</p>
             </div>""", unsafe_allow_html=True)
 
-# ------------ SECTION 3: SMART DIET & BUDGET PLANNER (NEW ENTERPRISE FEATURE) ------------
+# ------------ SECTION 3: SMART DIET & BUDGET PLANNER ------------
 elif menu == "🥗 Smart Diet & Budget Planner":
     st.title("🥗 Smart Diet & Budget Meal Architect")
     st.markdown("Precision nutritional engineering: High protein, high fiber, minimal calorie density, and maximum rupee value.")
@@ -555,9 +585,9 @@ elif menu == "🥗 Smart Diet & Budget Planner":
         diet_type = st.radio("Dietary Preference", ["Pure Vegetarian", "Eggetarian / Non-Veg"], horizontal=True)
     with top_c2:
         tier = st.selectbox("Select Investment Tier", [
-            "Tier 1: High-ROI Budget (₹1,800 - ₹2,500/mo)",
-            "Tier 2: Balanced Mid-Range (₹3,800 - ₹5,000/mo)",
-            "Tier 3: Premium Convenience (₹7,500 - ₹10,000/mo)"
+            "Tier 1: High-ROI Budget (Rs. 1,800 - Rs. 2,500/mo)",
+            "Tier 2: Balanced Mid-Range (Rs. 3,800 - Rs. 5,000/mo)",
+            "Tier 3: Premium Convenience (Rs. 7,500 - Rs. 10,000/mo)"
         ])
     with top_c3:
         st.markdown(f"""<div style="background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px 14px;">
@@ -573,7 +603,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
     if "Tier 1" in tier:
         with m_col1:
             st.markdown("""<div class="tier-card">
-                <span style="color:#3fb950; font-weight:bold;">🌅 MEAL 1: PRE/POST WORKOUT</span>
+                <span style="color:#3fb950; font-weight:bold;"> MEAL 1: PRE/POST WORKOUT</span>
                 <h4 style="margin:4px 0;">Sattu Power Chhas + Banana</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹18 | <strong>Protein:</strong> 12g | <strong>Cals:</strong> 240 kcal</p>
                 <p style="font-size:0.9rem;">40g Chana Sattu stirred in 250ml thin water/buttermilk with black salt, roasted jeera, and lemon + 1 small banana.</p>
@@ -581,7 +611,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             
         with m_col2:
             st.markdown("""<div class="tier-card">
-                <span style="color:#58a6ff; font-weight:bold;">☀️ MEAL 2: HIGH-VOLUME LUNCH</span>
+                <span style="color:#58a6ff; font-weight:bold;"> MEAL 2: HIGH-VOLUME LUNCH</span>
                 <h4 style="margin:4px 0;">10-Min Soya Bhurji + Curd + 2 Roti</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹32 | <strong>Protein:</strong> 42g | <strong>Cals:</strong> 510 kcal</p>
                 <p style="font-size:0.9rem;">60g dry soya chunks (boiled, pulsed & sauteed with onions/tomatoes/chilli) + 150g homemade fresh curd + 2 phulkas.</p>
@@ -589,7 +619,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             
         with m_col3:
             st.markdown("""<div class="tier-card">
-                <span style="color:#f0883e; font-weight:bold;">🌙 MEAL 3: EVENING & DINNER</span>
+                <span style="color:#f0883e; font-weight:bold;"> MEAL 3: EVENING & DINNER</span>
                 <h4 style="margin:4px 0;">Moong Sprouts Chaat + Paneer/Chilla</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹35 | <strong>Protein:</strong> 38g | <strong>Cals:</strong> 460 kcal</p>
                 <p style="font-size:0.9rem;">100g sprouted moong chaat with cucumber and roasted chana + 1 medium besan chilla or 60g raw low-cost paneer.</p>
@@ -598,7 +628,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
     elif "Tier 2" in tier:
         with m_col1:
             st.markdown("""<div class="tier-card">
-                <span style="color:#3fb950; font-weight:bold;">🌅 MEAL 1: POST WORKOUT</span>
+                <span style="color:#3fb950; font-weight:bold;"> MEAL 1: POST WORKOUT</span>
                 <h4 style="margin:4px 0;">Pea/Plant Protein Shake + Oats</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹65 | <strong>Protein:</strong> 28g | <strong>Cals:</strong> 260 kcal</p>
                 <p style="font-size:0.9rem;">1 scoop pure pea protein isolate blended with water + 35g rolled oats and cinnamon.</p>
@@ -606,7 +636,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             
         with m_col2:
             st.markdown("""<div class="tier-card">
-                <span style="color:#58a6ff; font-weight:bold;">☀️ MEAL 2: LUNCH</span>
+                <span style="color:#58a6ff; font-weight:bold;"> MEAL 2: LUNCH</span>
                 <h4 style="margin:4px 0;">Paneer / Tofu Tikka Bowl + Dal</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹75 | <strong>Protein:</strong> 34g | <strong>Cals:</strong> 520 kcal</p>
                 <p style="font-size:0.9rem;">120g grilled low-fat paneer or tofu + 1 bowl thick moong dal + green salad and 1 roti.</p>
@@ -614,7 +644,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             
         with m_col3:
             st.markdown("""<div class="tier-card">
-                <span style="color:#f0883e; font-weight:bold;">🌙 MEAL 3: DINNER</span>
+                <span style="color:#f0883e; font-weight:bold;"> MEAL 3: DINNER</span>
                 <h4 style="margin:4px 0;">Soya Stir Fry + Sprout Salad</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹40 | <strong>Protein:</strong> 36g | <strong>Cals:</strong> 420 kcal</p>
                 <p style="font-size:0.9rem;">50g dry soya chunks tossed with capsicum, broccoli, and soy sauce + 100g curd with roasted peanuts.</p>
@@ -623,7 +653,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
     else:
         with m_col1:
             st.markdown("""<div class="tier-card">
-                <span style="color:#3fb950; font-weight:bold;">🌅 MEAL 1: POST WORKOUT</span>
+                <span style="color:#3fb950; font-weight:bold;"> MEAL 1: POST WORKOUT</span>
                 <h4 style="margin:4px 0;">Whey Isolate + Berries Smoothie</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹140 | <strong>Protein:</strong> 30g | <strong>Cals:</strong> 240 kcal</p>
                 <p style="font-size:0.9rem;">1 scoop imported whey isolate + unsweetened almond milk + chia seeds and blueberries.</p>
@@ -631,15 +661,15 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             
         with m_col2:
             st.markdown("""<div class="tier-card">
-                <span style="color:#58a6ff; font-weight:bold;">☀️ MEAL 2: LUNCH</span>
+                <span style="color:#58a6ff; font-weight:bold;"> MEAL 2: LUNCH</span>
                 <h4 style="margin:4px 0;">Artisanal Tofu / Greek Yogurt Bowl</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹180 | <strong>Protein:</strong> 38g | <strong>Cals:</strong> 490 kcal</p>
-                <p style="font-size:0.9rem;">150g organic pan-seared tofu + 150g Epigamia Greek Yogurt + quinoa avocado salad.</p>
+                <p style="font-size:0.9rem;">150g organic pan-seared tofu + 150g Greek Yogurt + quinoa avocado salad.</p>
             </div>""", unsafe_allow_html=True)
             
         with m_col3:
             st.markdown("""<div class="tier-card">
-                <span style="color:#f0883e; font-weight:bold;">🌙 MEAL 3: DINNER</span>
+                <span style="color:#f0883e; font-weight:bold;"> MEAL 3: DINNER</span>
                 <h4 style="margin:4px 0;">Grilled Cottage Cheese + Edamame</h4>
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> ~₹160 | <strong>Protein:</strong> 36g | <strong>Cals:</strong> 440 kcal</p>
                 <p style="font-size:0.9rem;">120g grilled malai-free cottage cheese + 60g steamed edamame beans and roasted asparagus.</p>
@@ -680,7 +710,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             | :--- | :--- | :--- | :--- | :--- |
             | **Whey Protein Isolate (Imported)**| 2.0 kg (60 scoops) | ₹5,500 | 1,620 g protein | **₹3.39 / g** |
             | **Artisanal Tofu & High-End Paneer**| 5.0 kg | ₹2,200 | 900 g protein | **₹2.44 / g** |
-            | **Greek Yogurt Tubs (Epigamia)** | 24 Cups | ₹1,680 | 192 g protein | **₹8.75 / g** |
+            | **Greek Yogurt Tubs** | 24 Cups | ₹1,680 | 192 g protein | **₹8.75 / g** |
             | **Chia, Almond Butter & Berries** | Monthly | ₹1,200 | Healthy Fats | Peak Bioavailability |
             | **TOTAL MONTHLY INVESTMENT** | | **₹10,580** | **~3,600g Protein** | **~₹2.93 / g Net Average** |
             """)
@@ -927,6 +957,7 @@ elif menu == "🔍 Universal Food & Macro AI":
                     
                     p1, p2, p3, p4 = st.columns(4)
                     p1.metric("Calories", f"{res.get('calories', 0)} kcal")
-                    p2.metric("Protein", f"{res.get('protein', 0)} g")
+                    p1_p = res.get('protein', 0)
+                    p2.metric("Protein", f"{p1_p} g")
                     p3.metric("Carbs", f"{res.get('carbs', 0)} g")
                     p4.metric("Fat", f"{res.get('fat', 0)} g")
