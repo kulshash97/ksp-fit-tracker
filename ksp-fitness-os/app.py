@@ -25,8 +25,6 @@ st.markdown("""
     .metric-value { color: #58a6ff; font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .metric-subtext { color: #3fb950; font-size: 0.8rem; }
     .scan-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-top: 10px; }
-    .report-card { background: #0d1117; border: 1px solid #388bfd; border-radius: 10px; padding: 16px; margin-top: 15px; }
-    .split-badge { display: inline-block; padding: 4px 10px; background: #238636; color: #ffffff; border-radius: 16px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; }
     .tier-card { background: #161b22; border-radius: 10px; padding: 16px; border: 1px solid #30363d; height: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -64,7 +62,6 @@ def save_all_users(all_data):
 if "all_users_db" not in st.session_state:
     st.session_state.all_users_db = load_all_users()
 
-# --- SECURE PIN LOGIN & URL PERSISTENCE ---
 query_user = st.query_params.get("user", None)
 if "logged_in_user" not in st.session_state:
     if query_user and query_user in st.session_state.all_users_db:
@@ -75,14 +72,12 @@ if "logged_in_user" not in st.session_state:
 if not st.session_state.logged_in_user:
     st.markdown("<h1 style='text-align:center;'>⚡ KSP Fitness OS</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#8b949e;'>Sign in or create a quick PIN profile to keep your body stats, workouts, and diet private.</p>", unsafe_allow_html=True)
-    
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         with st.form("login_form"):
             username_input = st.text_input("Your Name or Mobile Number", placeholder="e.g. Shashank").strip()
             pin_input = st.text_input("4-Digit Private PIN", type="password", max_chars=4, placeholder="e.g. 1234").strip()
             submit_login = st.form_submit_button("🔐 Access My Dashboard", type="primary", use_container_width=True)
-            
             if submit_login:
                 if not username_input or len(pin_input) < 4:
                     st.error("Please enter your Name/Mobile and a 4-digit PIN.")
@@ -92,7 +87,7 @@ if not st.session_state.logged_in_user:
                     if user_key in db:
                         saved_pin = db[user_key].get("pin", "")
                         if saved_pin and saved_pin != pin_input:
-                            st.error("❌ Incorrect PIN for this profile. Try again or use a different username.")
+                            st.error("❌ Incorrect PIN for this profile.")
                         else:
                             db[user_key]["pin"] = pin_input
                             save_all_users(db)
@@ -105,15 +100,9 @@ if not st.session_state.logged_in_user:
                             "pin": pin_input,
                             "workouts": {},
                             "profile": {
-                                "height_cm": 170.0,
-                                "weight_kg": 70.0,
-                                "age": 28,
-                                "sex": "Male",
-                                "smm_kg": 28.0,
-                                "body_fat_pct": 22.0,
-                                "visceral_level": 8,
-                                "target_kcal": 1700,
-                                "target_protein": 115,
+                                "height_cm": 170.0, "weight_kg": 70.0, "age": 28, "sex": "Male",
+                                "smm_kg": 28.0, "body_fat_pct": 22.0, "visceral_level": 8,
+                                "target_kcal": 1700, "target_protein": 115,
                                 "recommended_split": "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)",
                                 "diet_preference": "Pure Vegetarian"
                             }
@@ -151,14 +140,14 @@ def get_gemini_api_key():
             key = None
     return key
 
-# --- ANTHROPOMETRIC + VISION FUSION ENGINE ---
 def calculate_anthropometric_baseline(height_cm, weight_kg, age, sex):
     if height_cm <= 0 or weight_kg <= 0:
         return 22.0, 22.0
     bmi = weight_kg / ((height_cm / 100.0) ** 2)
     sex_factor = 1 if sex == "Male" else 0
-    deurenberg_bf = (1.20 * bmi) + (0.23 * age) - (10.8 * sex_factor) - 5.4
-    indian_adjusted_bf = max(8.0, min(50.0, deurenberg_bf + 3.0))
+    effective_age = min(age, 40)
+    deurenberg_bf = (1.20 * bmi) + (0.23 * effective_age) - (10.8 * sex_factor) - 5.4
+    indian_adjusted_bf = max(10.0, min(48.0, deurenberg_bf + 2.0))
     return round(bmi, 1), round(indian_adjusted_bf, 1)
 
 def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
@@ -170,41 +159,33 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
     api_key = get_gemini_api_key()
     
     if not api_key:
-        low_b = round(baseline_bf - 1.5, 1)
-        high_b = round(baseline_bf + 1.5, 1)
         return {
             "estimated_bf_num": baseline_bf,
-            "estimated_body_fat_range": f"{low_b}% - {high_b}%",
-            "frame_analysis": f"Anthropometric baseline calibrated at {height_cm} cm and {weight_kg} kg (BMI {bmi}). Add GEMINI_API_KEY in secrets for live visual refinement.",
-            "recommendation": "Maintain high daily protein (2.0g/kg lean mass) alongside progressive compound lifts."
+            "estimated_body_fat_range": f"{round(baseline_bf-1.5,1)}% - {round(baseline_bf+1.5,1)}%",
+            "frame_analysis": f"⚠️ GEMINI_API_KEY not found in Streamlit Secrets. Showing formula baseline for {height_cm}cm / {weight_kg}kg (BMI {bmi}).",
+            "recommendation": "Add GEMINI_API_KEY in Streamlit App Settings -> Secrets to enable live photo vision."
         }
     
     sys_prompt = (
-        "You are an expert clinical anthropometrist and sports body-composition specialist performing Multimodal Vision + Biometric Fusion.\n"
-        f"Subject Biometrics:\n"
-        f"- Height: {height_cm} cm | Weight: {weight_kg} kg | Age: {age} | Biological Sex: {sex}\n"
-        f"- Calculated BMI: {bmi} kg/m2\n"
-        f"- South Asian Anthropometric Baseline BF%: {baseline_bf}%\n\n"
-        "Instructions for Fusion Calibration:\n"
-        f"1. Anchor your assessment around the anthropometric baseline ({baseline_bf}%) so you do NOT underestimate total body mass on shorter statures or hidden visceral fat.\n"
-        "2. Inspect the photo closely to refine that baseline UP or DOWN based on visible muscle mass vs fat.\n"
-        "Return ONLY a valid JSON object with these exact keys:\n"
-        '{\n'
-        '  "estimated_bf_num": single_float_number_midpoint,\n'
-        '  "estimated_body_fat_range": "e.g. 28% - 31%",\n'
-        '  "frame_analysis": "2-3 specific sentences explaining how height/weight mass interacts with visible muscle density and abdominal fat in the photo",\n'
-        '  "recommendation": "1-2 sentences with exact caloric and lifting advice tailored to this fused profile"\n'
-        '}'
+        "You are an expert clinical anthropometrist and body-composition specialist. "
+        f"Subject Biometrics: Height {height_cm} cm, Weight {weight_kg} kg, Age {age}, Sex {sex}, BMI {bmi}. "
+        f"Statistical BMI Baseline: {baseline_bf}%. "
+        "CRITICAL INSTRUCTION: Look directly at the person in the photo. "
+        "1. If the person has a slender frame, narrow waist, lean forearms/neck, and no visible belly protrusion (even in loose clothing), their true body fat is LOWER than the BMI baseline (e.g., 18%-22% for a slim older man, NOT 30%). "
+        "2. Only keep body fat near or above 28%-32% if you visually observe central abdominal fullness, chest adiposity, or a broad waist. "
+        "Return ONLY valid JSON with exact keys: "
+        '{"estimated_bf_num": float, "estimated_body_fat_range": "XX% - YY%", "frame_analysis": "specific visual observation of their actual build in the photo", "recommendation": "tailored diet and lifting advice"}'
     )
     
     try:
+        fixed_img.thumbnail((1024, 1024))
         buffered = io.BytesIO()
         fixed_img.save(buffered, format="JPEG", quality=85)
         img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
         parts = [
             {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-            {"text": f"Fuse the subject's biometrics ({height_cm}cm, {weight_kg}kg, {age}y, {sex}, BMI {bmi}) with visual physique cues to calculate true body fat percentage."}
+            {"text": f"Analyze this person's actual visual leanness vs their {height_cm}cm, {weight_kg}kg stats."}
         ]
         
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
@@ -214,17 +195,15 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
             "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
         }
         req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=20) as response:
             resp_data = json.loads(response.read().decode("utf-8"))
             return json.loads(resp_data["candidates"][0]["content"]["parts"][0]["text"])
-    except Exception:
-        low_b = round(baseline_bf - 1.5, 1)
-        high_b = round(baseline_bf + 1.5, 1)
+    except Exception as e:
         return {
             "estimated_bf_num": baseline_bf,
-            "estimated_body_fat_range": f"{low_b}% - {high_b}%",
-            "frame_analysis": f"Calibrated using stature-to-mass ratio ({height_cm}cm, {weight_kg}kg, BMI {bmi}) combined with upper-body frame proportions.",
-            "recommendation": "Prioritize progressive resistance training with a structured caloric deficit and high protein intake."
+            "estimated_body_fat_range": f"{round(baseline_bf-1.5,1)}% - {round(baseline_bf+1.5,1)}%",
+            "frame_analysis": f"⚠️ Vision API error ({str(e)[:70]}). Math baseline used for {height_cm}cm / {weight_kg}kg.",
+            "recommendation": "Check GEMINI_API_KEY in Streamlit Secrets or retry scan."
         }
 
 def analyze_food_universally(text_query=None, pil_image=None):
@@ -232,16 +211,7 @@ def analyze_food_universally(text_query=None, pil_image=None):
     sys_instruction = (
         "You are an expert clinical and sports nutritionist specializing in Indian and global diets. "
         "Analyze the user's food query or photo. Return ONLY a valid JSON object (no markdown, no backticks) with these exact keys:\n"
-        '{\n'
-        '  "item_name": "clean descriptive name",\n'
-        '  "portion_description": "e.g. 2 medium bananas (240g) or 1 bowl dal",\n'
-        '  "calories": number_in_kcal,\n'
-        '  "protein": number_in_grams,\n'
-        '  "carbs": number_in_grams,\n'
-        '  "fat": number_in_grams,\n'
-        '  "fiber": number_in_grams,\n'
-        '  "dietary_notes": "brief 1-sentence tip on muscle preservation or deficit impact"\n'
-        '}'
+        '{"item_name": "name", "portion_description": "serving", "calories": kcal_num, "protein": p_num, "carbs": c_num, "fat": f_num, "fiber": fib_num, "dietary_notes": "tip"}'
     )
     if api_key:
         try:
@@ -252,6 +222,7 @@ def analyze_food_universally(text_query=None, pil_image=None):
                 fixed_img = ImageOps.exif_transpose(pil_image)
                 if fixed_img.mode in ("RGBA", "P"):
                     fixed_img = fixed_img.convert("RGB")
+                fixed_img.thumbnail((1024, 1024))
                 buffered = io.BytesIO()
                 fixed_img.save(buffered, format="JPEG", quality=85)
                 img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -280,7 +251,6 @@ def analyze_food_universally(text_query=None, pil_image=None):
         return {"item_name": "Moong / Besan Chilla", "portion_description": f"{qty} piece(s)", "calories": round(165*qty,1), "protein": round(9.0*qty,1), "carbs": round(21*qty,1), "fat": 4.0, "fiber": 3.5, "dietary_notes": "High complex carb & moderate protein vegetarian staple."}
     return {"item_name": text_query.title() if text_query else "Scanned Meal", "portion_description": f"{qty} serving", "calories": round(240*qty,1), "protein": round(12*qty,1), "carbs": round(30*qty,1), "fat": 7.0, "fiber": 3.0, "dietary_notes": "Clean whole-food macro balance."}
 
-# --- COMPLETE 3-TIER DIET MATRIX (VEG & NON-VEG) ---
 DIET_MATRIX = {
     ("Pure Vegetarian", "Tier 1"): {
         "meals": [
@@ -296,9 +266,7 @@ DIET_MATRIX = {
             ("Fresh Milk (for Daily Curd)", "10 Litres", "₹450", "320 g protein", "₹1.40 / g"),
             ("Seasonal Greens, Onions & Bananas", "30 Days", "₹600", "Micronutrients & Fiber", "Baseline Vitality")
         ],
-        "total_cost": "₹1,880",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹0.52 / g Net Average"
+        "total_cost": "₹1,880", "total_prot": "~3,600g Protein", "avg_roi": "~₹0.52 / g Net Average"
     },
     ("Pure Vegetarian", "Tier 2"): {
         "meals": [
@@ -313,9 +281,7 @@ DIET_MATRIX = {
             ("Rolled Oats & Peanut Butter", "1.5 kg total", "₹550", "250 g protein", "₹2.20 / g"),
             ("Curd & Fresh Seasonal Veggies", "30 Days", "₹850", "250 g protein", "Healthy Gut & Satiety")
         ],
-        "total_cost": "₹4,640",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹1.28 / g Net Average"
+        "total_cost": "₹4,640", "total_prot": "~3,600g Protein", "avg_roi": "~₹1.28 / g Net Average"
     },
     ("Pure Vegetarian", "Tier 3"): {
         "meals": [
@@ -329,9 +295,7 @@ DIET_MATRIX = {
             ("Greek Yogurt Tubs", "24 Cups", "₹1,680", "192 g protein", "₹8.75 / g"),
             ("Chia, Almond Butter & Berries", "Monthly", "₹1,200", "Healthy Fats & Fiber", "Peak Bioavailability")
         ],
-        "total_cost": "₹10,580",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹2.93 / g Net Average"
+        "total_cost": "₹10,580", "total_prot": "~3,600g Protein", "avg_roi": "~₹2.93 / g Net Average"
     },
     ("Eggetarian / Non-Veg", "Tier 1"): {
         "meals": [
@@ -345,9 +309,7 @@ DIET_MATRIX = {
             ("Soya Chunks (Protein Booster)", "1.5 kg", "₹165", "780 g protein", "₹0.21 / g (Highest ROI)"),
             ("Atta, Buttermilk & Seasonal Veggies", "30 Days", "₹650", "Fiber & Micronutrients", "Satiety & Recovery")
         ],
-        "total_cost": "₹2,375",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹0.66 / g Net Average"
+        "total_cost": "₹2,375", "total_prot": "~3,600g Protein", "avg_roi": "~₹0.66 / g Net Average"
     },
     ("Eggetarian / Non-Veg", "Tier 2"): {
         "meals": [
@@ -361,9 +323,7 @@ DIET_MATRIX = {
             ("Local Fish (Rohu / Katla)", "2.0 kg", "₹600", "380 g protein", "₹1.57 / g"),
             ("Curd, Oats & Fresh Greens", "30 Days", "₹950", "Gut Health & Fiber", "Balanced Recomp")
         ],
-        "total_cost": "₹4,190",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹1.16 / g Net Average"
+        "total_cost": "₹4,190", "total_prot": "~3,600g Protein", "avg_roi": "~₹1.16 / g Net Average"
     },
     ("Eggetarian / Non-Veg", "Tier 3"): {
         "meals": [
@@ -377,9 +337,7 @@ DIET_MATRIX = {
             ("Free-Range Eggs & Chicken Breast", "4.0 kg + 60 Eggs", "₹1,900", "1,280 g protein", "₹1.48 / g"),
             ("Avocado, Quinoa & Greek Yogurt", "Monthly", "₹1,400", "Omega-3 & Probiotics", "Peak Performance")
         ],
-        "total_cost": "₹11,900",
-        "total_prot": "~3,600g Protein",
-        "avg_roi": "~₹3.30 / g Net Average"
+        "total_cost": "₹11,900", "total_prot": "~3,600g Protein", "avg_roi": "~₹3.30 / g Net Average"
     }
 }
 
@@ -457,21 +415,18 @@ def recalibrate_user_targets(weight_kg, bfp):
     recommended_protein = max(int(round(lean_mass * 2.2)), 95)
     bmr = 370 + (21.6 * lean_mass)
     tdee = bmr * 1.35
-    
     if bfp > 24.0:
         target_kcal = int(round(tdee - 450))
     elif bfp >= 18.0:
         target_kcal = int(round(tdee - 250))
     else:
         target_kcal = int(round(tdee + 150))
-        
     if bfp > 25.0:
         recommended_split = "Upper / Lower (Metabolic Density - Optimal for BF > 25%)"
     elif bfp >= 18.0:
         recommended_split = "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)"
     else:
         recommended_split = "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)"
-        
     profile["weight_kg"] = weight_kg
     profile["body_fat_pct"] = bfp
     profile["target_kcal"] = target_kcal
@@ -496,10 +451,8 @@ def build_pdf_document(log_date, workout_data):
     pdf.set_text_color(20, 20, 20)
     pdf.set_font('Helvetica', 'B', 11)
     pdf.cell(0, 7, clean_pdf_str(f"Program Split: {workout_data.get('split', 'PPL')}"), ln=True)
-    grand_vol = workout_data.get('grand_total_volume_kg', 0)
-    cals_burned = workout_data.get('total_calories_burned', 0)
-    pdf.cell(0, 7, clean_pdf_str(f"Total Weight Lifted (Tonnage): {grand_vol} kg"), ln=True)
-    pdf.cell(0, 7, clean_pdf_str(f"Total Calorie Burn (with Cardio): ~{cals_burned} kcal"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Weight Lifted (Tonnage): {workout_data.get('grand_total_volume_kg', 0)} kg"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Calorie Burn (with Cardio): ~{workout_data.get('total_calories_burned', 0)} kcal"), ln=True)
     finisher_txt = "15-20 min Incline Walk (15% @ 2.5 km/h) - COMPLETED" if workout_data.get('finisher') else "Skipped"
     pdf.cell(0, 7, clean_pdf_str(f"Cardio Finisher: {finisher_txt}"), ln=True)
     pdf.ln(4)
@@ -510,21 +463,14 @@ def build_pdf_document(log_date, workout_data):
     pdf.cell(0, 8, clean_pdf_str("DETAILED EXERCISE LOG"), ln=True)
     pdf.ln(2)
     for ex_name, details in workout_data.get('exercises', {}).items():
-        ex_vol = details.get('exercise_volume', 0)
-        ex_kc = details.get('exercise_kcal', 0)
         pdf.set_fill_color(240, 242, 245)
         pdf.set_font('Helvetica', 'B', 10)
         pdf.set_text_color(0, 51, 102)
-        pdf.cell(190, 7, clean_pdf_str(f"  {ex_name}  |  Volume: {ex_vol} kg  |  Burn: ~{ex_kc} kcal"), border=1, ln=True, fill=True)
+        pdf.cell(190, 7, clean_pdf_str(f"  {ex_name}  |  Volume: {details.get('exercise_volume', 0)} kg  |  Burn: ~{details.get('exercise_kcal', 0)} kcal"), border=1, ln=True, fill=True)
         pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(40, 40, 40)
         for s in details.get('sets', []):
-            set_num = s.get('set', 1)
-            tot_wt = s.get('total_weight', 0.0)
-            reps = s.get('reps', 0)
-            vol = s.get('volume', tot_wt * reps)
-            calc = s.get('calc_type', f"{tot_wt}kg")
-            pdf.cell(190, 6, clean_pdf_str(f"      Set {set_num}: {tot_wt} kg total ({reps} reps) -> Load: {vol} kg [{calc}]"), border='LR', ln=True)
+            pdf.cell(190, 6, clean_pdf_str(f"      Set {s.get('set', 1)}: {s.get('total_weight', 0.0)} kg total ({s.get('reps', 0)} reps) -> Load: {s.get('volume', 0)} kg [{s.get('calc_type', '')}]"), border='LR', ln=True)
         pdf.cell(190, 1, '', border='T', ln=True)
         pdf.ln(3)
     return bytes(pdf.output())
@@ -532,7 +478,6 @@ def build_pdf_document(log_date, workout_data):
 def build_diet_pdf(profile_data, diet_pref, tier_choice):
     tier_key = "Tier 1" if "Tier 1" in tier_choice else ("Tier 2" if "Tier 2" in tier_choice else "Tier 3")
     plan_data = DIET_MATRIX.get((diet_pref, tier_key), DIET_MATRIX[("Pure Vegetarian", "Tier 1")])
-    
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -555,17 +500,14 @@ def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf.set_draw_color(200, 200, 200)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
-    
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 8, clean_pdf_str("DAILY MEAL STRUCTURE"), ln=True)
-    pdf.set_font('Helvetica', '', 9)
     for m_tag, m_title, m_cost, m_prot, m_cals, m_desc in plan_data["meals"]:
         pdf.set_font('Helvetica', 'B', 10)
         pdf.cell(0, 6, clean_pdf_str(f"  {m_title} ({m_prot} Protein | {m_cals} | {m_cost})"), ln=True)
         pdf.set_font('Helvetica', '', 9)
         pdf.multi_cell(190, 5, clean_pdf_str(f"    {m_desc}"))
         pdf.ln(2)
-        
     pdf.ln(3)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 8, clean_pdf_str("ESTIMATED 30-DAY GROCERY HAUL & BUDGET"), ln=True)
@@ -585,7 +527,6 @@ menu = st.sidebar.radio("Navigation", [
     "🔍 Universal Food & Macro AI"
 ])
 
-# ----------------- SECTION 1: DASHBOARD & BMI -----------------
 if menu == "📊 Dashboard & BMI":
     st.title(f"⚡ Performance Dashboard — {display_name}")
     c1, c2, c3, c4 = st.columns(4)
@@ -616,25 +557,19 @@ if menu == "📊 Dashboard & BMI":
                 <div style="font-size: 1rem; color: #e6edf3;">Classification: <strong>{cat}</strong></div>
             </div>""", unsafe_allow_html=True)
 
-# ------------ SECTION 2: INBODY & BODY COMPOSITION (MULTIMODAL FUSION) ------------
 elif menu == "📑 InBody & Body Composition":
     st.title("📑 InBody / DEXA & Multimodal Vision Engine")
     tab_photo, tab_scan = st.tabs(["📸 AI Photo + Biometric Fusion Scanner", "📊 Manual InBody / DEXA Entry"])
-    
     with tab_photo:
         st.subheader("📸 Multimodal Body Fat Estimator (Photo + Height/Weight Fusion)")
         st.caption("Fuses your height, weight, age, and South Asian body-composition baseline with visual muscle-vs-fat detection.")
-        
         user_photo = st.file_uploader("Step 1: Upload Full / Upper Body Photo", type=["jpg", "jpeg", "png"], key="user_photo_vision")
-        
         if user_photo:
             raw_img = Image.open(user_photo)
             upright_img = ImageOps.exif_transpose(raw_img)
-            
             col_img, col_bio = st.columns([1, 1.3])
             with col_img:
                 st.image(upright_img, caption="Orientation-Corrected Snapshot", width=280)
-            
             with col_bio:
                 st.markdown("#### Step 2: Confirm Biometrics for Accurate Scaling")
                 f_h = st.number_input("Height (cm)", min_value=120.0, max_value=230.0, value=float(profile.get("height_cm", 170.0)), step=0.5, key="fusion_h")
@@ -644,7 +579,6 @@ elif menu == "📑 InBody & Body Composition":
                     f_age = st.number_input("Age", min_value=14, max_value=90, value=int(profile.get("age", 28)), step=1, key="fusion_age")
                 with c_sex:
                     f_sex = st.selectbox("Sex", ["Male", "Female"], index=0 if profile.get("sex", "Male") == "Male" else 1, key="fusion_sex")
-                
                 if st.button("🔍 Run Fused AI Physique Analysis", type="primary", use_container_width=True):
                     profile["height_cm"] = f_h
                     profile["weight_kg"] = f_w
@@ -653,7 +587,6 @@ elif menu == "📑 InBody & Body Composition":
                     persist_current_user()
                     with st.spinner("Fusing stature-to-weight density with visual muscle & fat contours..."):
                         st.session_state.last_vision_scan = analyze_physique_fusion_ai(upright_img, f_h, f_w, f_age, f_sex)
-                    
             if "last_vision_scan" in st.session_state:
                 vres = st.session_state.last_vision_scan
                 est_num = float(vres.get("estimated_bf_num", 25.0))
@@ -663,12 +596,10 @@ elif menu == "📑 InBody & Body Composition":
                     <p><strong>Physique & Mass Analysis:</strong> {vres.get('frame_analysis', '')}</p>
                     <p style="color:#8b949e; font-size:0.9rem;"><strong>Protocol:</strong> {vres.get('recommendation', '')}</p>
                 </div>""", unsafe_allow_html=True)
-                
                 if st.button(f"⚡ Sync {est_num}% Body Fat & {f_w} kg to My Dashboard & Split"):
                     recalibrate_user_targets(f_w, est_num)
                     st.success(f"✅ Dashboard, calories, and workout split updated to {est_num}% body fat!")
                     st.rerun()
-
     with tab_scan:
         st.subheader("InBody / DEXA Telemetry")
         sc1, sc2, sc3, sc4 = st.columns(4)
@@ -680,7 +611,6 @@ elif menu == "📑 InBody & Body Composition":
             scan_bfp = st.number_input("Body Fat Percentage (%)", value=float(profile.get("body_fat_pct", 22.0)), step=0.1)
         with sc4:
             scan_vfl = st.number_input("Visceral Fat Level", value=int(profile.get("visceral_level", 8)), step=1)
-            
         if st.button("🚀 Recalibrate App & Workout Plan", type="primary"):
             profile["smm_kg"] = scan_smm
             profile["visceral_level"] = scan_vfl
@@ -688,13 +618,11 @@ elif menu == "📑 InBody & Body Composition":
             st.success("✅ Profile calibrated!")
             st.rerun()
 
-# ------------ SECTION 3: SMART DIET & BUDGET PLANNER (DYNAMIC 3-TIER + VEG/NON-VEG) ------------
 elif menu == "🥗 Smart Diet & Budget Planner":
     st.title(f"🥗 Smart Diet & Budget Architect — {display_name}")
     st.markdown("Precision nutritional engineering: High protein, high fiber, minimal calorie density, and maximum rupee value.")
     t_cals = profile.get('target_kcal', 1600)
     t_prot = profile.get('target_protein', 115)
-    
     top_c1, top_c2, top_c3 = st.columns([1, 1.2, 1.8])
     with top_c1:
         diet_type = st.radio("Dietary Preference", ["Pure Vegetarian", "Eggetarian / Non-Veg"], horizontal=True)
@@ -709,13 +637,10 @@ elif menu == "🥗 Smart Diet & Budget Planner":
             <span style="color:#8b949e; font-size:0.85rem;">CALIBRATED MACRO BLUEPRINT</span><br>
             <strong>{t_cals} kcal/day</strong> &bull; <span style="color:#3fb950; font-weight:bold;">{t_prot}g Protein</span> &bull; <span>~32g Fiber</span>
         </div>""", unsafe_allow_html=True)
-        
     tier_key = "Tier 1" if "Tier 1" in tier else ("Tier 2" if "Tier 2" in tier else "Tier 3")
     active_plan = DIET_MATRIX.get((diet_type, tier_key), DIET_MATRIX[("Pure Vegetarian", "Tier 1")])
-    
     st.markdown("---")
     st.subheader(f"🍱 Daily Meal Blueprint ({diet_type} • {tier_key})")
-    
     m_cols = st.columns(3)
     colors = ["#3fb950", "#58a6ff", "#f0883e"]
     for idx, (m_tag, m_title, m_cost, m_prot, m_cals, m_desc) in enumerate(active_plan["meals"]):
@@ -726,57 +651,41 @@ elif menu == "🥗 Smart Diet & Budget Planner":
                 <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> {m_cost} | <strong>Protein:</strong> {m_prot} | <strong>Cals:</strong> {m_cals}</p>
                 <p style="font-size:0.9rem;">{m_desc}</p>
             </div>""", unsafe_allow_html=True)
-
     st.markdown("---")
     st.subheader("🛒 30-Day Bulk Grocery Haul & Spending Forecast")
     g_tab1, g_tab2 = st.tabs(["📋 Itemized Shopping List", "👨‍🍳 10-Minute Batch Cook Recipes"])
-    
     with g_tab1:
         table_md = "| Item | Monthly Quantity | Estimated Cost | Protein Yield | Value Metric (₹/g Protein) |\n| :--- | :--- | :--- | :--- | :--- |\n"
         for itm, qty, prc, prot_y, roi in active_plan["groceries"]:
             table_md += f"| **{itm}** | {qty} | {prc} | {prot_y} | **{roi}** |\n"
         table_md += f"| **TOTAL MONTHLY INVESTMENT** | | **{active_plan['total_cost']}** | **{active_plan['total_prot']}** | **{active_plan['avg_roi']}** |\n"
         st.markdown(table_md)
-
     with g_tab2:
         if diet_type == "Pure Vegetarian":
             st.markdown("""
             #### 1. 10-Minute Soya Keema Bhurji (31g Protein | ₹8 cost)
-            * **Step 1:** Boil 60g soya chunks in salted water for 5 minutes. Drain and squeeze water out completely with your hands.
-            * **Step 2:** Pulse the squeezed chunks in a mixer-grinder for 3 seconds until it looks like minced keema.
-            * **Step 3:** Heat 1 tsp mustard oil in a pan, toss in cumin seeds, 1 chopped green chilli, turmeric, salt, and garam masala. Add minced soya and stir fry on high flame for 3 minutes.
-            
+            * Boil 60g soya chunks in salted water for 5 minutes. Squeeze dry and pulse in mixer for 3 seconds. Saute with green chilli, turmeric, salt, and 1 tsp mustard oil for 3 minutes.
             #### 2. No-Cook Electrolyte Sattu Shake (12g Protein | ₹12 cost)
-            * **Step 1:** Take 40g chana sattu in a shaker. Add 250ml cold water, black salt, roasted jeera powder, and half a lemon. Shake and drink post-workout.
-            
-            #### 3. High-Volume Sprouted Moong Satiety Bowl (24g Protein | ₹15 cost)
-            * **Step 1:** Toss 100g soaked moong sprouts with diced cucumber, tomato, 30g roasted chana, chaat masala, and lime juice.
+            * Mix 40g chana sattu in 250ml cold water with black salt, roasted jeera, and half a lemon.
             """)
         else:
             st.markdown("""
             #### 1. 8-Minute High-Protein Egg & Soya Bhurji (38g Protein | ₹26 cost)
-            * **Step 1:** Soak 30g soya granules in hot water for 4 mins and squeeze dry.
-            * **Step 2:** Whisk 3 whole eggs with turmeric, chilli powder, and salt. Scramble together with soya granules and chopped onions in 1 tsp oil for 3 minutes.
-            
+            * Soak 30g soya granules in hot water for 4 mins, squeeze dry, and scramble with 3 whole eggs, onions, and spices.
             #### 2. 10-Minute Pan-Seared Pepper Chicken Breast (46g Protein | ₹65 cost)
-            * **Step 1:** Slice 200g chicken breast into thin strips; coat with crushed black pepper, garlic paste, lemon juice, and salt.
-            * **Step 2:** Sear on a hot non-stick pan with 1 tsp olive/mustard oil for 4 minutes per side until golden and juicy.
+            * Slice 200g chicken breast into thin strips and sear on a hot pan with garlic, crushed pepper, and lemon juice for 4 mins per side.
             """)
-
     st.markdown("---")
     st.subheader("📄 Download Customized 30-Day Diet & Grocery Plan (PDF)")
     diet_pdf_bytes = build_diet_pdf(profile, diet_type, tier)
     b64_diet = base64.b64encode(diet_pdf_bytes).decode('utf-8')
-    diet_href = f'<a href="data:application/pdf;base64,{b64_diet}" download="KSP_30Day_Diet_{display_name}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 6px;">📥 Download 30-Day Diet & Budget PDF</a>'
-    st.markdown(diet_href, unsafe_allow_html=True)
+    st.markdown(f'<a href="data:application/pdf;base64,{b64_diet}" download="KSP_30Day_Diet_{display_name}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 6px;">📥 Download 30-Day Diet & Budget PDF</a>', unsafe_allow_html=True)
 
-# ------------ SECTION 4: ADAPTIVE WORKOUT LOGGER ------------
 elif menu == "🏋️ Adaptive Workout Logger":
     st.title("🏋️ Adaptive Workout & Multi-Set Logger")
     system_keys = list(WORKOUT_SYSTEMS.keys())
     saved_rec = profile.get("recommended_split", system_keys[0])
     default_sys_idx = system_keys.index(saved_rec) if saved_rec in system_keys else 0
-    
     col_sys, col_day, col_date = st.columns([2, 2, 1])
     with col_sys:
         chosen_system = st.selectbox("Training System", system_keys, index=default_sys_idx)
@@ -786,24 +695,19 @@ elif menu == "🏋️ Adaptive Workout Logger":
     with col_date:
         session_date = st.date_input("Date", value=date.today())
         log_date = session_date.strftime("%Y-%m-%d")
-
     exercises = WORKOUT_SYSTEMS[chosen_system][split_choice]
     user_weight = float(profile.get("weight_kg", 70.0))
-
     if "exercise_set_counts" not in st.session_state:
         st.session_state.exercise_set_counts = {}
-
     session_workout_data = {}
     grand_total_volume = 0.0
     grand_total_lift_cals = 0.0
-
     for idx, (ex, ex_type) in enumerate(exercises):
         st.markdown(f"### {idx + 1}. {ex}")
         set_count_key = f"{active_key}_{log_date}_{ex}_count"
         if set_count_key not in st.session_state.exercise_set_counts:
             st.session_state.exercise_set_counts[set_count_key] = 3
         current_sets = st.session_state.exercise_set_counts[set_count_key]
-        
         ctrl1, ctrl2, mode_col = st.columns([1, 1, 3])
         with ctrl1:
             if st.button("➕ Add Set", key=f"add_{active_key}_{ex}_{idx}"):
@@ -821,7 +725,6 @@ elif menu == "🏋️ Adaptive Workout Logger":
                 key=f"{active_key}_{log_date}_{ex}_mode",
                 horizontal=True
             )
-            
         ex_sets = []
         ex_volume = 0.0
         ex_cals = 0.0
@@ -845,7 +748,6 @@ elif menu == "🏋️ Adaptive Workout Logger":
         grand_total_volume += ex_volume
         grand_total_lift_cals += ex_cals
         session_workout_data[ex] = {"sets": ex_sets, "exercise_volume": round(ex_volume, 1), "exercise_kcal": round(ex_cals, 1)}
-
     finisher_done = st.checkbox("Completed 15-20 min Incline Treadmill Walk (15% @ 2.5 km/h)", value=True, key=f"{active_key}_{log_date}_finisher")
     total_session_cals = round(grand_total_lift_cals + (165.0 if finisher_done else 0.0), 1)
     if st.button("💾 Lock & Persist Workout Session", type="primary"):
@@ -858,24 +760,17 @@ elif menu == "🏋️ Adaptive Workout Logger":
         }
         persist_current_user()
         st.success(f"✅ Workout saved for {display_name}!")
-
     if log_date in user_data.get("workouts", {}):
         pdf_bytes = build_pdf_document(log_date, user_data["workouts"][log_date])
         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
         st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" download="KSP_Workout_{display_name}_{log_date}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 10px;">📥 Download Workout PDF</a>', unsafe_allow_html=True)
 
-# ------------ SECTION 5: UNIVERSAL FOOD & MACRO AI (TEXT + PHOTO RESTORED) ------------
 elif menu == "🔍 Universal Food & Macro AI":
     st.title("🔍 Universal Food & Macro AI")
     st.markdown("Multimodal nutrition intelligence: Type any regional Indian dish or snap a photo of your meal plate for instant macro breakdown.")
-    
     tab_text, tab_photo = st.tabs(["💬 Natural Language Query", "📸 Real Meal / Food Photo"])
-    
     with tab_text:
-        user_query = st.text_input(
-            "Describe your food naturally:",
-            placeholder="e.g. '2 medium bananas', 'moong dal chilla with mint chutney', '1 plate idli sambar', '150g paneer bhurji'"
-        )
+        user_query = st.text_input("Describe your food naturally:", placeholder="e.g. '2 medium bananas', 'moong dal chilla with mint chutney', '150g paneer bhurji'")
         if st.button("🚀 Analyze Nutrition", type="primary", key="btn_text_macro"):
             if not user_query.strip():
                 st.warning("Please type a food description first.")
@@ -887,13 +782,11 @@ elif menu == "🔍 Universal Food & Macro AI":
                         <p style="color:#8b949e;">Serving: <strong>{res.get('portion_description', '')}</strong></p>
                         <p style="color:#3fb950; font-size:0.95rem;">💡 <em>{res.get('dietary_notes', '')}</em></p>
                     </div>""", unsafe_allow_html=True)
-                    
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("Calories", f"{res.get('calories', 0)} kcal")
                     m2.metric("Protein", f"{res.get('protein', 0)} g")
                     m3.metric("Carbs", f"{res.get('carbs', 0)} g")
                     m4.metric("Fat", f"{res.get('fat', 0)} g")
-
     with tab_photo:
         st.markdown("Upload or take a photo of any meal, plate, snack, or fruit:")
         photo_file = st.file_uploader("Upload Meal Photo", type=["jpg", "jpeg", "png"], key="universal_meal_img")
@@ -901,7 +794,6 @@ elif menu == "🔍 Universal Food & Macro AI":
             raw_meal_img = Image.open(photo_file)
             pil_img = ImageOps.exif_transpose(raw_meal_img)
             st.image(pil_img, caption="Meal Uploaded", width=340)
-            
             if st.button("🔍 AI Vision Scan Meal", type="primary", key="btn_photo_macro"):
                 with st.spinner("Analyzing dish contents, ingredients, and portion weight..."):
                     res = analyze_food_universally(pil_image=pil_img)
@@ -910,7 +802,6 @@ elif menu == "🔍 Universal Food & Macro AI":
                         <p style="color:#8b949e;">Estimated Serving: <strong>{res.get('portion_description', '')}</strong></p>
                         <p style="color:#3fb950; font-size:0.95rem;">💡 <em>{res.get('dietary_notes', '')}</em></p>
                     </div>""", unsafe_allow_html=True)
-                    
                     p1, p2, p3, p4 = st.columns(4)
                     p1.metric("Calories", f"{res.get('calories', 0)} kcal")
                     p2.metric("Protein", f"{res.get('protein', 0)} g")
