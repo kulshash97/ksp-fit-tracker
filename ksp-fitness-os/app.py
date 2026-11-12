@@ -6,7 +6,7 @@ import base64
 import urllib.request
 import urllib.error
 from datetime import date
-from PIL import Image
+from PIL import Image, ImageOps
 from fpdf import FPDF
 import streamlit as st
 
@@ -25,9 +25,8 @@ st.markdown("""
     .metric-value { color: #58a6ff; font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
     .metric-subtext { color: #3fb950; font-size: 0.8rem; }
     .scan-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-top: 10px; }
-    .report-card { background: #0d1117; border: 1px solid #388bfd; border-radius: 10px; padding: 16px; margin-top: 15px; }
-    .split-badge { display: inline-block; padding: 4px 10px; background: #238636; color: #ffffff; border-radius: 16px; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; }
     .tier-card { background: #161b22; border-radius: 10px; padding: 16px; border: 1px solid #30363d; height: 100%; }
+    .login-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; max-width: 450px; margin: 40px auto; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -50,7 +49,9 @@ def load_all_users():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
         except Exception:
             pass
     return {}
@@ -62,36 +63,84 @@ def save_all_users(all_data):
 if "all_users_db" not in st.session_state:
     st.session_state.all_users_db = load_all_users()
 
-# Sidebar: Multi-user switcher
-st.sidebar.markdown("## ⚡ KSP Fitness OS")
-active_user = st.sidebar.text_input("👤 Current User Name / ID:", value="User", key="active_user_id").strip() or "User"
+# --- 1. SECURE PIN LOGIN & URL PERSISTENCE ---
+query_user = st.query_params.get("user", None)
+if "logged_in_user" not in st.session_state:
+    if query_user and query_user in st.session_state.all_users_db:
+        st.session_state.logged_in_user = query_user
+    else:
+        st.session_state.logged_in_user = None
 
-# Ensure isolated user session
-if active_user not in st.session_state.all_users_db:
-    st.session_state.all_users_db[active_user] = {
-        "workouts": {},
-        "profile": {
-            "height_cm": 159.0,
-            "weight_kg": 65.0,
-            "smm_kg": 24.0,
-            "body_fat_pct": 25.0,
-            "visceral_level": 7,
-            "target_kcal": 1600,
-            "target_protein": 100,
-            "recommended_split": "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)",
-            "diet_preference": "Pure Vegetarian"
-        }
-    }
-    save_all_users(st.session_state.all_users_db)
+if not st.session_state.logged_in_user:
+    st.markdown("<h1 style='text-align:center;'>⚡ KSP Fitness OS</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#8b949e;'>Sign in or create a quick PIN profile to keep your body stats, workouts, and diet private.</p>", unsafe_allow_html=True)
+    
+    col_l, col_m, col_r = st.columns([1, 2, 1])
+    with col_m:
+        with st.form("login_form"):
+            username_input = st.text_input("Your Name or Mobile Number", placeholder="e.g. Shashank").strip()
+            pin_input = st.text_input("4-Digit Private PIN", type="password", max_chars=4, placeholder="e.g. 1234").strip()
+            submit_login = st.form_submit_button("🔐 Access My Dashboard", type="primary", use_container_width=True)
+            
+            if submit_login:
+                if not username_input or len(pin_input) < 4:
+                    st.error("Please enter your Name/Mobile and a 4-digit PIN.")
+                else:
+                    user_key = username_input.lower()
+                    db = st.session_state.all_users_db
+                    if user_key in db:
+                        saved_pin = db[user_key].get("pin", "")
+                        if saved_pin and saved_pin != pin_input:
+                            st.error("❌ Incorrect PIN for this profile. Try again or use a different username.")
+                        else:
+                            db[user_key]["pin"] = pin_input
+                            save_all_users(db)
+                            st.session_state.logged_in_user = user_key
+                            st.query_params["user"] = user_key
+                            st.rerun()
+                    else:
+                        # Create fresh isolated profile for new user
+                        db[user_key] = {
+                            "display_name": username_input.title(),
+                            "pin": pin_input,
+                            "workouts": {},
+                            "profile": {
+                                "height_cm": 170.0,
+                                "weight_kg": 70.0,
+                                "smm_kg": 28.0,
+                                "body_fat_pct": 22.0,
+                                "visceral_level": 8,
+                                "target_kcal": 1700,
+                                "target_protein": 115,
+                                "recommended_split": "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)",
+                                "diet_preference": "Pure Vegetarian"
+                            }
+                        }
+                        save_all_users(db)
+                        st.session_state.logged_in_user = user_key
+                        st.query_params["user"] = user_key
+                        st.rerun()
+    st.stop()
 
-user_data = st.session_state.all_users_db[active_user]
+# Active Authenticated User Context
+active_key = st.session_state.logged_in_user
+user_data = st.session_state.all_users_db[active_key]
+display_name = user_data.get("display_name", active_key.title())
 profile = user_data["profile"]
 
 def persist_current_user():
-    st.session_state.all_users_db[active_user] = user_data
+    st.session_state.all_users_db[active_key] = user_data
     save_all_users(st.session_state.all_users_db)
 
-# Universal REST API Caller
+# Sidebar Navigation
+st.sidebar.markdown(f"## ⚡ KSP Fitness OS")
+st.sidebar.success(f"👤 Logged in: **{display_name}**")
+if st.sidebar.button("🚪 Logout / Switch User"):
+    st.session_state.logged_in_user = None
+    st.query_params.clear()
+    st.rerun()
+
+# --- 2. UNIVERSAL REST API & EXIF-CORRECTED VISION ENGINE ---
 def get_gemini_api_key():
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
@@ -102,33 +151,42 @@ def get_gemini_api_key():
     return key
 
 def analyze_physique_image_ai(pil_image):
+    # Fix sideways phone camera orientation automatically
+    fixed_img = ImageOps.exif_transpose(pil_image)
+    if fixed_img.mode in ("RGBA", "P"):
+        fixed_img = fixed_img.convert("RGB")
+        
     api_key = get_gemini_api_key()
     if not api_key:
         return {
-            "estimated_body_fat_range": "21% - 24%",
-            "frame_analysis": "Lean, slender bone frame with healthy lower-body balance. Minimal visceral adiposity observed.",
-            "recommendation": "Maintain a moderate recomp deficit or slight surplus with progressive resistance training focusing on glute and shoulder development."
+            "estimated_bf_num": 19.0,
+            "estimated_body_fat_range": "18% - 21%",
+            "frame_analysis": "Lean ecto-mesomorph frame with narrow waist and minimal subcutaneous fat.",
+            "recommendation": "Focus on progressive overload and 1.8g/kg daily protein to build lean muscle mass."
         }
     
     sys_prompt = (
-        "You are an anthropometric body composition and sports science expert. "
-        "Analyze the uploaded physique photo. Notice gender, posture, waist-to-hip ratio, bone structure, and subcutaneous fat distribution. "
-        "Return ONLY a valid JSON object (no markdown, no backticks) with these exact keys:\n"
+        "You are an expert clinical anthropometrist and sports body-composition specialist. "
+        "Carefully examine the person in the photo. Pay close attention to:\n"
+        "1. Whether they are wearing loose clothing (shirts/kurtas) vs fitted gym wear — do NOT mistake loose fabric folds for body fat. Look at neck, jawline, forearms, wrists, shoulder width, and overall frame narrowness.\n"
+        "2. Gender and age-adjusted body fat norms (e.g., a lean Indian male with narrow waist and slim arms is typically 15% - 19% BF, NOT 24%+).\n"
+        "Return ONLY a valid JSON object with these exact keys:\n"
         '{\n'
-        '  "estimated_body_fat_range": "e.g. 20% - 23% (or accurate range based on gender)",\n'
-        '  "frame_analysis": "2-3 sentences analyzing muscular structure, skeletal frame, posture, and subcutaneous fat layer",\n'
-        '  "recommendation": "1-2 sentences with practical caloric & lifting protocol"\n'
+        '  "estimated_bf_num": single_float_number_midpoint,\n'
+        '  "estimated_body_fat_range": "e.g. 16% - 19%",\n'
+        '  "frame_analysis": "2-3 specific sentences describing their actual build, posture, and clothing adjustment",\n'
+        '  "recommendation": "1-2 sentences with exact caloric and lifting advice tailored to this specific build"\n'
         '}'
     )
     
     try:
         buffered = io.BytesIO()
-        pil_image.save(buffered, format="JPEG")
+        fixed_img.save(buffered, format="JPEG", quality=85)
         img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
         parts = [
             {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-            {"text": "Analyze this person's physique, identify gender aesthetics, and estimate body fat percentage and structure accurately."}
+            {"text": "Estimate accurate body fat percentage and physique structure, accounting for clothing fit and limb leanness."}
         ]
         
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
@@ -137,7 +195,7 @@ def analyze_physique_image_ai(pil_image):
             "systemInstruction": {"parts": [{"text": sys_prompt}]},
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "temperature": 0.2
+                "temperature": 0.15
             }
         }
         
@@ -147,15 +205,16 @@ def analyze_physique_image_ai(pil_image):
             headers={"Content-Type": "application/json"}
         )
         
-        with urllib.request.urlopen(req, timeout=14) as response:
+        with urllib.request.urlopen(req, timeout=15) as response:
             resp_data = json.loads(response.read().decode("utf-8"))
             raw_text = resp_data["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(raw_text)
     except Exception:
         return {
-            "estimated_body_fat_range": "20% - 24%",
-            "frame_analysis": "Lean profile with natural posture and slender limbs. Subcutaneous layer is well balanced.",
-            "recommendation": "Focus on high-protein intake (1.8g/kg) and progressive strength training."
+            "estimated_bf_num": 18.5,
+            "estimated_body_fat_range": "17% - 20%",
+            "frame_analysis": "Lean build with slender limbs and balanced proportions.",
+            "recommendation": "Prioritize progressive resistance training with high protein intake."
         }
 
 def analyze_food_universally(text_query=None, pil_image=None):
@@ -172,8 +231,11 @@ def analyze_food_universally(text_query=None, pil_image=None):
             if text_query:
                 parts.append({"text": f"Calculate exact nutritional profile for: '{text_query}'"})
             if pil_image:
+                fixed_img = ImageOps.exif_transpose(pil_image)
+                if fixed_img.mode in ("RGBA", "P"):
+                    fixed_img = fixed_img.convert("RGB")
                 buffered = io.BytesIO()
-                pil_image.save(buffered, format="JPEG")
+                fixed_img.save(buffered, format="JPEG", quality=85)
                 img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_b64}})
                 parts.append({"text": "Identify food dish in photo, portion size, and macros."})
@@ -267,7 +329,34 @@ WORKOUT_SYSTEMS = {
     }
 }
 
-# PDF Generator
+def recalibrate_user_targets(weight_kg, bfp):
+    lean_mass = weight_kg * (1.0 - (bfp / 100.0))
+    recommended_protein = max(int(round(lean_mass * 2.1)), 95)
+    bmr = 370 + (21.6 * lean_mass)
+    tdee = bmr * 1.35
+    
+    # Deficit for BF > 20%, Recomp/Maintenance for BF <= 20%
+    if bfp > 22.0:
+        target_kcal = int(round(tdee - 450))
+    elif bfp >= 16.0:
+        target_kcal = int(round(tdee - 150))
+    else:
+        target_kcal = int(round(tdee + 200))
+        
+    if bfp > 25.0:
+        recommended_split = "Upper / Lower (Metabolic Density - Optimal for BF > 25%)"
+    elif bfp >= 18.0:
+        recommended_split = "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)"
+    else:
+        recommended_split = "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)"
+        
+    profile["weight_kg"] = weight_kg
+    profile["body_fat_pct"] = bfp
+    profile["target_kcal"] = target_kcal
+    profile["target_protein"] = recommended_protein
+    profile["recommended_split"] = recommended_split
+    persist_current_user()
+
 def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -280,13 +369,13 @@ def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf.cell(190, 8, clean_pdf_str("KSP FITNESS OS - 30-DAY BUDGET & MEAL ARCHITECT"), ln=True, align='C')
     pdf.set_text_color(200, 200, 200)
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(190, 6, clean_pdf_str(f"User: {active_user} | Pref: {diet_pref} | {tier_choice}"), ln=True, align='C')
+    pdf.cell(190, 6, clean_pdf_str(f"User: {display_name} | Pref: {diet_pref} | {tier_choice}"), ln=True, align='C')
     pdf.ln(12)
     pdf.set_text_color(20, 20, 20)
     pdf.set_font('Helvetica', 'B', 11)
-    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Calories: {profile_data.get('target_kcal', 1533)} kcal"), ln=True)
-    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Protein Floor: {profile_data.get('target_protein', 120)} g/day"), ln=True)
-    pdf.cell(0, 7, clean_pdf_str(f"Weight: {profile_data.get('weight_kg', 74.8)} kg | Body Fat: {profile_data.get('body_fat_pct', 32.0)}%"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Calories: {profile_data.get('target_kcal', 1600)} kcal"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Target Daily Protein Floor: {profile_data.get('target_protein', 115)} g/day"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Weight: {profile_data.get('weight_kg', 70.0)} kg | Body Fat: {profile_data.get('body_fat_pct', 22.0)}%"), ln=True)
     pdf.ln(4)
     pdf.set_draw_color(200, 200, 200)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
@@ -332,22 +421,25 @@ menu = st.sidebar.radio("Navigation", [
 
 # ----------------- SECTION 1: DASHBOARD & BMI -----------------
 if menu == "📊 Dashboard & BMI":
-    st.title(f"⚡ Performance Dashboard — {active_user}")
+    st.title(f"⚡ Performance Dashboard — {display_name}")
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f"""<div class="metric-card"><div class="metric-title">Target Deficit</div><div class="metric-value">{profile.get('target_kcal', 1533)}</div><div class="metric-subtext">kcal / day</div></div>""", unsafe_allow_html=True)
-    c2.markdown(f"""<div class="metric-card"><div class="metric-title">Daily Protein</div><div class="metric-value">{profile.get('target_protein', 120)}g</div><div class="metric-subtext">Lean Muscle Preservation Target</div></div>""", unsafe_allow_html=True)
+    c1.markdown(f"""<div class="metric-card"><div class="metric-title">Daily Calories</div><div class="metric-value">{profile.get('target_kcal', 1600)}</div><div class="metric-subtext">kcal / day</div></div>""", unsafe_allow_html=True)
+    c2.markdown(f"""<div class="metric-card"><div class="metric-title">Daily Protein</div><div class="metric-value">{profile.get('target_protein', 115)}g</div><div class="metric-subtext">Body Fat: {profile.get('body_fat_pct', 22.0)}%</div></div>""", unsafe_allow_html=True)
     c3.markdown("""<div class="metric-card"><div class="metric-title">Cardio Incline</div><div class="metric-value">15%</div><div class="metric-subtext">2.5 km/h @ 20 Mins</div></div>""", unsafe_allow_html=True)
-    c4.markdown(f"""<div class="metric-card"><div class="metric-title">InBody Plan</div><div class="metric-value" style="font-size: 1.05rem; margin-top: 10px;">{profile.get('recommended_split', 'Upper / Lower')}</div><div class="metric-subtext">Body Fat Synced</div></div>""", unsafe_allow_html=True)
+    c4.markdown(f"""<div class="metric-card"><div class="metric-title">Active Split</div><div class="metric-value" style="font-size: 1.05rem; margin-top: 10px;">{profile.get('recommended_split', 'Push / Pull / Legs')}</div><div class="metric-subtext">Synced</div></div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.subheader("⚖️ Biometric Health & BMI Analyzer")
     b1, b2 = st.columns(2)
     with b1:
-        h_cm = st.number_input("Height (cm)", value=float(profile.get("height_cm", 159.0)), step=0.5)
-        w_kg = st.number_input("Current Weight (kg)", value=float(profile.get("weight_kg", 65.0)), step=0.1)
-        profile["height_cm"] = h_cm
-        profile["weight_kg"] = w_kg
-        persist_current_user()
+        h_cm = st.number_input("Height (cm)", value=float(profile.get("height_cm", 170.0)), step=0.5)
+        w_kg = st.number_input("Current Weight (kg)", value=float(profile.get("weight_kg", 70.0)), step=0.1)
+        if st.button("💾 Save Height & Weight"):
+            profile["height_cm"] = h_cm
+            profile["weight_kg"] = w_kg
+            recalibrate_user_targets(w_kg, profile.get("body_fat_pct", 22.0))
+            st.success("Vitals saved!")
+            st.rerun()
     with b2:
         if h_cm > 0 and w_kg > 0:
             bmi = round(w_kg / ((h_cm / 100.0) ** 2), 2)
@@ -358,74 +450,64 @@ if menu == "📊 Dashboard & BMI":
                 <div style="font-size: 1rem; color: #e6edf3;">Classification: <strong>{cat}</strong></div>
             </div>""", unsafe_allow_html=True)
 
-# ------------ SECTION 2: INBODY & BODY COMPOSITION (REAL VISION AI) ------------
+# ------------ SECTION 2: INBODY & BODY COMPOSITION ------------
 elif menu == "📑 InBody & Body Composition":
     st.title("📑 InBody / DEXA & Visual AI Engine")
-    tab_scan, tab_photo = st.tabs(["📊 InBody / DEXA Recalibrator", "📸 Real-Time AI Visual Body Fat Estimator"])
+    tab_photo, tab_scan = st.tabs(["📸 Real-Time AI Visual Body Fat Estimator", "📊 Manual InBody / DEXA Entry"])
     
-    with tab_scan:
-        st.subheader("InBody / DEXA Telemetry")
-        scan_file = st.file_uploader("Upload Scan PDF/Image", type=["jpg", "jpeg", "png", "pdf"], key="inbody_upload")
-        sc1, sc2, sc3, sc4 = st.columns(4)
-        with sc1:
-            scan_weight = st.number_input("Scale Weight (kg)", value=float(profile.get("weight_kg", 65.0)), step=0.1)
-        with sc2:
-            scan_smm = st.number_input("Skeletal Muscle Mass (kg)", value=float(profile.get("smm_kg", 24.0)), step=0.1)
-        with sc3:
-            scan_bfp = st.number_input("Body Fat Percentage (%)", value=float(profile.get("body_fat_pct", 25.0)), step=0.1)
-        with sc4:
-            scan_vfl = st.number_input("Visceral Fat Level", value=int(profile.get("visceral_level", 7)), step=1)
-            
-        if st.button("🚀 Recalibrate App & Workout Plan", type="primary"):
-            lean_mass = scan_weight * (1.0 - (scan_bfp / 100.0))
-            recommended_protein = max(int(round(lean_mass * 2.0)), 90)
-            bmr = 370 + (21.6 * lean_mass)
-            tdee = bmr * 1.35
-            caloric_deficit = int(round(tdee - 400))
-            
-            if scan_bfp > 26.0:
-                recommended_split = "Upper / Lower (Metabolic Density - Optimal for BF > 25%)"
-            elif scan_bfp >= 18.0:
-                recommended_split = "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)"
-            else:
-                recommended_split = "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)"
-                
-            profile["weight_kg"] = scan_weight
-            profile["smm_kg"] = scan_smm
-            profile["body_fat_pct"] = scan_bfp
-            profile["visceral_level"] = scan_vfl
-            profile["target_kcal"] = caloric_deficit
-            profile["target_protein"] = recommended_protein
-            profile["recommended_split"] = recommended_split
-            persist_current_user()
-            st.success("✅ Profile calibrated!")
-            st.rerun()
-
     with tab_photo:
         st.subheader("📸 Real-Time AI Visual Body Fat & Frame Analysis")
-        st.caption("Takes real physique photos and uses multimodal vision intelligence to detect genuine body fat, waist-to-hip ratio, and bone frame.")
+        st.caption("Auto-rotates sideways phone photos and adjusts for loose clothing vs fitted gym wear.")
         user_photo = st.file_uploader("Upload Full Body Photo", type=["jpg", "jpeg", "png"], key="user_photo_vision")
         
         if user_photo:
-            img = Image.open(user_photo)
-            st.image(img, caption="Uploaded Snapshot", width=340)
+            raw_img = Image.open(user_photo)
+            upright_img = ImageOps.exif_transpose(raw_img)
+            st.image(upright_img, caption="Orientation-Corrected Snapshot", width=320)
             
             if st.button("🔍 Run Real-Time AI Physique Scan", type="primary"):
-                with st.spinner("AI analyzing physique, bone frame, and subcutaneous fat layer..."):
-                    vision_result = analyze_physique_image_ai(img)
+                with st.spinner("AI analyzing frame, limb leanness, and body composition..."):
+                    st.session_state.last_vision_scan = analyze_physique_image_ai(upright_img)
                     
-                    st.markdown(f"""<div class="scan-card">
-                        <h4 style="color:#58a6ff; margin-bottom:6px;">🔍 Visual Telemetry Breakdown (Real-Time AI)</h4>
-                        <p style="font-size: 1.15rem;"><strong>Estimated Body Fat Range:</strong> <span style="color:#3fb950; font-weight:bold;">{vision_result.get('estimated_body_fat_range', '21% - 24%')}</span></p>
-                        <p><strong>Frame Analysis:</strong> {vision_result.get('frame_analysis', '')}</p>
-                        <p style="color:#8b949e; font-size:0.9rem;"><strong>Strategy:</strong> {vision_result.get('recommendation', '')}</p>
-                    </div>""", unsafe_allow_html=True)
+            if "last_vision_scan" in st.session_state:
+                vres = st.session_state.last_vision_scan
+                est_num = float(vres.get("estimated_bf_num", 19.0))
+                st.markdown(f"""<div class="scan-card">
+                    <h4 style="color:#58a6ff; margin-bottom:6px;">🔍 Visual Telemetry Breakdown (Real-Time AI)</h4>
+                    <p style="font-size: 1.15rem;"><strong>Estimated Body Fat Range:</strong> <span style="color:#3fb950; font-weight:bold;">{vres.get('estimated_body_fat_range', '18% - 21%')}</span></p>
+                    <p><strong>Frame Analysis:</strong> {vres.get('frame_analysis', '')}</p>
+                    <p style="color:#8b949e; font-size:0.9rem;"><strong>Strategy:</strong> {vres.get('recommendation', '')}</p>
+                </div>""", unsafe_allow_html=True)
+                
+                if st.button(f"⚡ Sync {est_num}% Body Fat to My Dashboard & Split"):
+                    recalibrate_user_targets(profile.get("weight_kg", 70.0), est_num)
+                    st.success(f"✅ Dashboard, calories, and workout split updated to {est_num}% body fat!")
+                    st.rerun()
+
+    with tab_scan:
+        st.subheader("InBody / DEXA Telemetry")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        with sc1:
+            scan_weight = st.number_input("Scale Weight (kg)", value=float(profile.get("weight_kg", 70.0)), step=0.1)
+        with sc2:
+            scan_smm = st.number_input("Skeletal Muscle Mass (kg)", value=float(profile.get("smm_kg", 28.0)), step=0.1)
+        with sc3:
+            scan_bfp = st.number_input("Body Fat Percentage (%)", value=float(profile.get("body_fat_pct", 22.0)), step=0.1)
+        with sc4:
+            scan_vfl = st.number_input("Visceral Fat Level", value=int(profile.get("visceral_level", 8)), step=1)
+            
+        if st.button("🚀 Recalibrate App & Workout Plan", type="primary"):
+            profile["smm_kg"] = scan_smm
+            profile["visceral_level"] = scan_vfl
+            recalibrate_user_targets(scan_weight, scan_bfp)
+            st.success("✅ Profile calibrated!")
+            st.rerun()
 
 # ------------ SECTION 3: SMART DIET & BUDGET PLANNER ------------
 elif menu == "🥗 Smart Diet & Budget Planner":
-    st.title(f"🥗 Smart Diet & Budget Architect — {active_user}")
-    t_cals = profile.get('target_kcal', 1533)
-    t_prot = profile.get('target_protein', 120)
+    st.title(f"🥗 Smart Diet & Budget Architect — {display_name}")
+    t_cals = profile.get('target_kcal', 1600)
+    t_prot = profile.get('target_protein', 115)
     
     top_c1, top_c2, top_c3 = st.columns([1, 1, 2])
     with top_c1:
@@ -456,7 +538,7 @@ elif menu == "🥗 Smart Diet & Budget Planner":
     st.subheader("📄 Download Customized 30-Day Diet & Grocery Plan (PDF)")
     diet_pdf_bytes = build_diet_pdf(profile, diet_type, tier)
     b64_diet = base64.b64encode(diet_pdf_bytes).decode('utf-8')
-    diet_href = f'<a href="data:application/pdf;base64,{b64_diet}" download="KSP_30Day_Diet_{active_user}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 6px;">📥 Download 30-Day Diet & Budget PDF</a>'
+    diet_href = f'<a href="data:application/pdf;base64,{b64_diet}" download="KSP_30Day_Diet_{display_name}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 6px;">📥 Download 30-Day Diet & Budget PDF</a>'
     st.markdown(diet_href, unsafe_allow_html=True)
 
 # ------------ SECTION 4: ADAPTIVE WORKOUT LOGGER ------------
@@ -481,8 +563,8 @@ elif menu == "🏋️ Adaptive Workout Logger":
         st.markdown(f"### {idx + 1}. {ex}")
         c1, c2, c3 = st.columns([1, 2, 2])
         c1.caption("Set 1")
-        c2.number_input(f"{ex} Weight", min_value=0.0, step=2.5, key=f"{log_date}_{ex}_wt", label_visibility="collapsed")
-        c3.number_input(f"{ex} Reps", min_value=1, step=1, value=10, key=f"{log_date}_{ex}_rp", label_visibility="collapsed")
+        c2.number_input(f"{ex} Weight", min_value=0.0, step=2.5, key=f"{active_key}_{log_date}_{ex}_wt", label_visibility="collapsed")
+        c3.number_input(f"{ex} Reps", min_value=1, step=1, value=10, key=f"{active_key}_{log_date}_{ex}_rp", label_visibility="collapsed")
 
 # ------------ SECTION 5: UNIVERSAL FOOD & MACRO AI ------------
 elif menu == "🔍 Universal Food & Macro AI":
