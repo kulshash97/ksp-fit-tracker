@@ -153,12 +153,10 @@ def get_gemini_api_key():
 
 # --- ANTHROPOMETRIC + VISION FUSION ENGINE ---
 def calculate_anthropometric_baseline(height_cm, weight_kg, age, sex):
-    """Calculates BMI and South Asian-adjusted Deurenberg baseline BF%."""
     if height_cm <= 0 or weight_kg <= 0:
         return 22.0, 22.0
     bmi = weight_kg / ((height_cm / 100.0) ** 2)
     sex_factor = 1 if sex == "Male" else 0
-    # Standard Deurenberg + 3.0% South Asian visceral/adiposity offset
     deurenberg_bf = (1.20 * bmi) + (0.23 * age) - (10.8 * sex_factor) - 5.4
     indian_adjusted_bf = max(8.0, min(50.0, deurenberg_bf + 3.0))
     return round(bmi, 1), round(indian_adjusted_bf, 1)
@@ -177,7 +175,7 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
         return {
             "estimated_bf_num": baseline_bf,
             "estimated_body_fat_range": f"{low_b}% - {high_b}%",
-            "frame_analysis": f"Anthropometric baseline calibrated at {height_cm} cm and {weight_kg} kg (BMI {bmi}). Add GEMINI_API_KEY in secrets for live visual muscle-vs-fat refinement.",
+            "frame_analysis": f"Anthropometric baseline calibrated at {height_cm} cm and {weight_kg} kg (BMI {bmi}). Add GEMINI_API_KEY in secrets for live visual refinement.",
             "recommendation": "Maintain high daily protein (2.0g/kg lean mass) alongside progressive compound lifts."
         }
     
@@ -188,11 +186,8 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
         f"- Calculated BMI: {bmi} kg/m2\n"
         f"- South Asian Anthropometric Baseline BF%: {baseline_bf}%\n\n"
         "Instructions for Fusion Calibration:\n"
-        "1. Anchor your assessment around the anthropometric baseline ({baseline_bf}%) so you do NOT underestimate total body mass on shorter statures or hidden visceral fat.\n"
-        "2. Inspect the photo closely to refine that baseline UP or DOWN based on visible muscle mass vs fat:\n"
-        "   - If the subject has visible muscular hypertrophy (thick delts, arms, chest separation, visible abs), adjust LOWER than the BMI-based baseline.\n"
-        "   - If the subject carries noticeable abdominal/lower-chest subcutaneous fat or lacks muscle density, keep close to or slightly ABOVE the baseline.\n"
-        "   - Account for loose clothing vs shirtless/fitted wear.\n"
+        f"1. Anchor your assessment around the anthropometric baseline ({baseline_bf}%) so you do NOT underestimate total body mass on shorter statures or hidden visceral fat.\n"
+        "2. Inspect the photo closely to refine that baseline UP or DOWN based on visible muscle mass vs fat.\n"
         "Return ONLY a valid JSON object with these exact keys:\n"
         '{\n'
         '  "estimated_bf_num": single_float_number_midpoint,\n'
@@ -216,22 +211,12 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
         payload = {
             "contents": [{"parts": parts}],
             "systemInstruction": {"parts": [{"text": sys_prompt}]},
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "temperature": 0.15
-            }
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.15}
         }
-        
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
-        
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=15) as response:
             resp_data = json.loads(response.read().decode("utf-8"))
-            raw_text = resp_data["candidates"][0]["content"]["parts"][0]["text"]
-            return json.loads(raw_text)
+            return json.loads(resp_data["candidates"][0]["content"]["parts"][0]["text"])
     except Exception:
         low_b = round(baseline_bf - 1.5, 1)
         high_b = round(baseline_bf + 1.5, 1)
@@ -245,10 +230,18 @@ def analyze_physique_fusion_ai(pil_image, height_cm, weight_kg, age, sex):
 def analyze_food_universally(text_query=None, pil_image=None):
     api_key = get_gemini_api_key()
     sys_instruction = (
-        "You are an expert clinical and sports nutritionist. Analyze the food query or photo. "
-        "Return ONLY a valid JSON object with:\n"
-        '{\n  "item_name": "name",\n  "portion_description": "serving size",\n  "calories": kcal_num,\n'
-        '  "protein": p_num,\n  "carbs": c_num,\n  "fat": f_num,\n  "fiber": fib_num,\n  "dietary_notes": "tip"\n}'
+        "You are an expert clinical and sports nutritionist specializing in Indian and global diets. "
+        "Analyze the user's food query or photo. Return ONLY a valid JSON object (no markdown, no backticks) with these exact keys:\n"
+        '{\n'
+        '  "item_name": "clean descriptive name",\n'
+        '  "portion_description": "e.g. 2 medium bananas (240g) or 1 bowl dal",\n'
+        '  "calories": number_in_kcal,\n'
+        '  "protein": number_in_grams,\n'
+        '  "carbs": number_in_grams,\n'
+        '  "fat": number_in_grams,\n'
+        '  "fiber": number_in_grams,\n'
+        '  "dietary_notes": "brief 1-sentence tip on muscle preservation or deficit impact"\n'
+        '}'
     )
     if api_key:
         try:
@@ -263,7 +256,7 @@ def analyze_food_universally(text_query=None, pil_image=None):
                 fixed_img.save(buffered, format="JPEG", quality=85)
                 img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_b64}})
-                parts.append({"text": "Identify food dish in photo, portion size, and macros."})
+                parts.append({"text": "Identify the food/dish in this image, estimate portion size, and calculate exact macros."})
                 
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
             payload = {
@@ -272,7 +265,7 @@ def analyze_food_universally(text_query=None, pil_image=None):
                 "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2}
             }
             req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=12) as response:
+            with urllib.request.urlopen(req, timeout=14) as response:
                 resp_data = json.loads(response.read().decode("utf-8"))
                 return json.loads(resp_data["candidates"][0]["content"]["parts"][0]["text"])
         except Exception:
@@ -282,8 +275,113 @@ def analyze_food_universally(text_query=None, pil_image=None):
     count_m = re.search(r"^(\d+(\.\d+)?)", q)
     qty = float(count_m.group(1)) if count_m else 1.0
     if "bann" in q or "banana" in q or "kela" in q:
-        return {"item_name": "Banana", "portion_description": f"{qty} unit(s)", "calories": round(95*qty,1), "protein": round(1.2*qty,1), "carbs": round(24*qty,1), "fat": 0.3, "fiber": 2.6, "dietary_notes": "Pre-workout carb."}
-    return {"item_name": text_query.title() if text_query else "Custom Item", "portion_description": f"{qty} serving", "calories": round(180*qty,1), "protein": round(8*qty,1), "carbs": round(26*qty,1), "fat": 5.0, "fiber": 2.0, "dietary_notes": "Clean source."}
+        return {"item_name": "Banana", "portion_description": f"{qty} unit(s)", "calories": round(95*qty,1), "protein": round(1.2*qty,1), "carbs": round(24*qty,1), "fat": 0.3, "fiber": 2.6, "dietary_notes": "Fast-acting glycogen source."}
+    elif "chilla" in q or "cheela" in q or "chila" in q:
+        return {"item_name": "Moong / Besan Chilla", "portion_description": f"{qty} piece(s)", "calories": round(165*qty,1), "protein": round(9.0*qty,1), "carbs": round(21*qty,1), "fat": 4.0, "fiber": 3.5, "dietary_notes": "High complex carb & moderate protein vegetarian staple."}
+    return {"item_name": text_query.title() if text_query else "Scanned Meal", "portion_description": f"{qty} serving", "calories": round(240*qty,1), "protein": round(12*qty,1), "carbs": round(30*qty,1), "fat": 7.0, "fiber": 3.0, "dietary_notes": "Clean whole-food macro balance."}
+
+# --- COMPLETE 3-TIER DIET MATRIX (VEG & NON-VEG) ---
+DIET_MATRIX = {
+    ("Pure Vegetarian", "Tier 1"): {
+        "meals": [
+            ("🌅 MEAL 1: PRE/POST WORKOUT", "Sattu Power Chhas + Banana", "~₹18", "12g", "240 kcal", "40g Chana Sattu stirred in 250ml thin buttermilk with black salt, roasted jeera, and lemon + 1 small banana."),
+            ("☀️ MEAL 2: HIGH-VOLUME LUNCH", "10-Min Soya Bhurji + Curd + 2 Roti", "~₹32", "42g", "510 kcal", "60g dry soya chunks (boiled, pulsed & sauteed with onions/tomatoes/chilli) + 150g fresh curd + 2 phulkas."),
+            ("🌙 MEAL 3: EVENING & DINNER", "Moong Sprouts Chaat + Paneer/Chilla", "~₹35", "38g", "460 kcal", "100g sprouted moong chaat with cucumber and roasted chana + 1 medium besan chilla or 60g low-cost paneer.")
+        ],
+        "groceries": [
+            ("Soya Chunks (Bulk Pack)", "2.0 kg", "₹220", "1,040 g protein", "₹0.21 / g (Highest ROI)"),
+            ("Chana Sattu Powder", "1.5 kg", "₹210", "300 g protein", "₹0.70 / g"),
+            ("Moong Dal (Sprouts & Chilla)", "2.0 kg", "₹260", "480 g protein", "₹0.54 / g"),
+            ("Roasted Bengal Gram (Chana)", "1.0 kg", "₹140", "190 g protein", "₹0.73 / g"),
+            ("Fresh Milk (for Daily Curd)", "10 Litres", "₹450", "320 g protein", "₹1.40 / g"),
+            ("Seasonal Greens, Onions & Bananas", "30 Days", "₹600", "Micronutrients & Fiber", "Baseline Vitality")
+        ],
+        "total_cost": "₹1,880",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹0.52 / g Net Average"
+    },
+    ("Pure Vegetarian", "Tier 2"): {
+        "meals": [
+            ("🌅 MEAL 1: POST WORKOUT", "Pea/Plant Protein Shake + Oats", "~₹65", "28g", "260 kcal", "1 scoop pure pea protein isolate blended with chilled water + 35g rolled oats and cinnamon."),
+            ("☀️ MEAL 2: HIGH-PROTEIN LUNCH", "Low-Fat Paneer Tikka Bowl + Dal", "~₹75", "36g", "520 kcal", "120g pan-grilled low-fat paneer + 1 bowl thick moong dal + cucumber salad and 1 whole-wheat roti."),
+            ("🌙 MEAL 3: EVENING & DINNER", "Soya Stir Fry + Curd & Peanuts", "~₹40", "38g", "430 kcal", "50g dry soya chunks tossed with capsicum, broccoli & soy sauce + 150g curd with roasted peanuts.")
+        ],
+        "groceries": [
+            ("Plant / Pea Protein Isolate", "1.0 kg (30 scoops)", "₹1,600", "720 g protein", "₹2.20 / g"),
+            ("Low-Fat Dairy Paneer", "4.0 kg", "₹1,400", "720 g protein", "₹1.94 / g"),
+            ("Soya Chunks & Dal Blend", "2.0 kg", "₹240", "800 g protein", "₹0.30 / g"),
+            ("Rolled Oats & Peanut Butter", "1.5 kg total", "₹550", "250 g protein", "₹2.20 / g"),
+            ("Curd & Fresh Seasonal Veggies", "30 Days", "₹850", "250 g protein", "Healthy Gut & Satiety")
+        ],
+        "total_cost": "₹4,640",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹1.28 / g Net Average"
+    },
+    ("Pure Vegetarian", "Tier 3"): {
+        "meals": [
+            ("🌅 MEAL 1: POST WORKOUT", "Whey Isolate + Berries Smoothie", "~₹140", "30g", "240 kcal", "1 scoop imported whey protein isolate + unsweetened almond milk + chia seeds and blueberries."),
+            ("☀️ MEAL 2: ARTISANAL LUNCH", "Seared Organic Tofu + Greek Yogurt Bowl", "~₹180", "40g", "490 kcal", "150g organic pan-seared tofu + 150g Greek Yogurt + quinoa, edamame & avocado salad."),
+            ("🌙 MEAL 3: GOURMET DINNER", "Grilled Cottage Cheese + Asparagus", "~₹160", "38g", "450 kcal", "130g grilled malai-free cottage cheese + 60g steamed edamame beans and roasted greens.")
+        ],
+        "groceries": [
+            ("Whey Protein Isolate (Imported)", "2.0 kg (60 scoops)", "₹5,500", "1,620 g protein", "₹3.39 / g"),
+            ("Artisanal Tofu & High-End Paneer", "5.0 kg", "₹2,200", "900 g protein", "₹2.44 / g"),
+            ("Greek Yogurt Tubs", "24 Cups", "₹1,680", "192 g protein", "₹8.75 / g"),
+            ("Chia, Almond Butter & Berries", "Monthly", "₹1,200", "Healthy Fats & Fiber", "Peak Bioavailability")
+        ],
+        "total_cost": "₹10,580",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹2.93 / g Net Average"
+    },
+    ("Eggetarian / Non-Veg", "Tier 1"): {
+        "meals": [
+            ("🌅 MEAL 1: PRE/POST WORKOUT", "4 Boiled Eggs (2 Whole + 2 Whites) + Banana", "~₹28", "20g", "260 kcal", "2 whole boiled eggs + 2 egg whites seasoned with black pepper & rock salt + 1 banana."),
+            ("☀️ MEAL 2: HIGH-VOLUME LUNCH", "Chicken Liver / Keema Curry + 2 Roti", "~₹42", "45g", "520 kcal", "150g spiced chicken liver or lean chicken keema sauteed with minimal oil + 2 phulkas + onion salad."),
+            ("🌙 MEAL 3: EVENING & DINNER", "Egg Bhurji (3 Eggs) + Soya Chunks", "~₹32", "42g", "450 kcal", "3-egg masala bhurji mixed with 30g boiled soya granules + 1 cup buttermilk.")
+        ],
+        "groceries": [
+            ("Whole Farm Eggs (Bulk Trays)", "150 Eggs (5 Trays)", "₹900", "900 g protein", "₹1.00 / g"),
+            ("Chicken Liver / Lean Cuts", "3.0 kg", "₹660", "630 g protein", "₹1.04 / g"),
+            ("Soya Chunks (Protein Booster)", "1.5 kg", "₹165", "780 g protein", "₹0.21 / g (Highest ROI)"),
+            ("Atta, Buttermilk & Seasonal Veggies", "30 Days", "₹650", "Fiber & Micronutrients", "Satiety & Recovery")
+        ],
+        "total_cost": "₹2,375",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹0.66 / g Net Average"
+    },
+    ("Eggetarian / Non-Veg", "Tier 2"): {
+        "meals": [
+            ("🌅 MEAL 1: POST WORKOUT", "4 Egg Whites + 2 Whole Omelette + Oats", "~₹55", "30g", "320 kcal", "Fluffy masala omelette (2 whole + 4 whites) + 35g rolled oats porridge."),
+            ("☀️ MEAL 2: HIGH-PROTEIN LUNCH", "200g Grilled Chicken Breast + Rice/Roti", "~₹85", "48g", "490 kcal", "200g herb-marinated pan-seared chicken breast + 1 cup steamed rice/2 rotis + cucumber raita."),
+            ("🌙 MEAL 3: EVENING & DINNER", "Rohu/Katla Fish Curry or Chicken Salad", "~₹75", "38g", "410 kcal", "150g local river fish curry or shredded chicken tikka salad with mint chutney.")
+        ],
+        "groceries": [
+            ("Boneless Chicken Breast", "6.0 kg", "₹1,920", "1,380 g protein", "₹1.39 / g"),
+            ("Whole Eggs", "120 Eggs (4 Trays)", "₹720", "720 g protein", "₹1.00 / g"),
+            ("Local Fish (Rohu / Katla)", "2.0 kg", "₹600", "380 g protein", "₹1.57 / g"),
+            ("Curd, Oats & Fresh Greens", "30 Days", "₹950", "Gut Health & Fiber", "Balanced Recomp")
+        ],
+        "total_cost": "₹4,190",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹1.16 / g Net Average"
+    },
+    ("Eggetarian / Non-Veg", "Tier 3"): {
+        "meals": [
+            ("🌅 MEAL 1: POST WORKOUT", "Whey Isolate + 3 Pasture-Raised Eggs", "~₹155", "42g", "330 kcal", "1 scoop imported whey isolate + 3 poached/scrambled free-range eggs + sourdough toast."),
+            ("☀️ MEAL 2: GOURMET LUNCH", "Grilled Salmon / Prawns + Quinoa Bowl", "~₹260", "42g", "480 kcal", "160g grilled Norwegian salmon or tiger prawns + quinoa, avocado & roasted bell peppers."),
+            ("🌙 MEAL 3: LEAN DINNER", "200g Sous-Vide Chicken Breast + Greek Yogurt", "~₹150", "46g", "420 kcal", "200g herb-roasted chicken breast + 100g Greek yogurt tzatziki dip and asparagus.")
+        ],
+        "groceries": [
+            ("Whey Protein Isolate (2kg Tub)", "1 Tub", "₹5,400", "1,620 g protein", "₹3.33 / g"),
+            ("Salmon Fillets & Tiger Prawns", "3.0 kg", "₹3,200", "660 g protein", "₹4.84 / g"),
+            ("Free-Range Eggs & Chicken Breast", "4.0 kg + 60 Eggs", "₹1,900", "1,280 g protein", "₹1.48 / g"),
+            ("Avocado, Quinoa & Greek Yogurt", "Monthly", "₹1,400", "Omega-3 & Probiotics", "Peak Performance")
+        ],
+        "total_cost": "₹11,900",
+        "total_prot": "~3,600g Protein",
+        "avg_roi": "~₹3.30 / g Net Average"
+    }
+}
 
 WORKOUT_SYSTEMS = {
     "Upper / Lower (Metabolic Density - Optimal for BF > 25%)": {
@@ -432,6 +530,9 @@ def build_pdf_document(log_date, workout_data):
     return bytes(pdf.output())
 
 def build_diet_pdf(profile_data, diet_pref, tier_choice):
+    tier_key = "Tier 1" if "Tier 1" in tier_choice else ("Tier 2" if "Tier 2" in tier_choice else "Tier 3")
+    plan_data = DIET_MATRIX.get((diet_pref, tier_key), DIET_MATRIX[("Pure Vegetarian", "Tier 1")])
+    
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -454,43 +555,26 @@ def build_diet_pdf(profile_data, diet_pref, tier_choice):
     pdf.set_draw_color(200, 200, 200)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
+    
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(0, 8, clean_pdf_str("DAILY MEAL STRUCTURE"), ln=True)
+    pdf.set_font('Helvetica', '', 9)
+    for m_tag, m_title, m_cost, m_prot, m_cals, m_desc in plan_data["meals"]:
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 6, clean_pdf_str(f"  {m_title} ({m_prot} Protein | {m_cals} | {m_cost})"), ln=True)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.multi_cell(190, 5, clean_pdf_str(f"    {m_desc}"))
+        pdf.ln(2)
+        
+    pdf.ln(3)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 8, clean_pdf_str("ESTIMATED 30-DAY GROCERY HAUL & BUDGET"), ln=True)
     pdf.set_font('Helvetica', '', 10)
-    
-    if "Tier 1" in tier_choice:
-        groceries = [
-            ("Soya Chunks (Raw Bulk)", "2.0 kg", "Rs. 220", "52g protein / 100g"),
-            ("Chana Sattu Powder", "1.5 kg", "Rs. 210", "20g protein / 100g"),
-            ("Fresh Curd Setup", "6.0 kg", "Rs. 380", "15g protein / day"),
-            ("Roasted Chana", "1.0 kg", "Rs. 140", "Intra-day fiber & protein"),
-            ("Moong Dal for Sprouts", "2.0 kg", "Rs. 260", "24g protein / 100g raw"),
-            ("Seasonal Veggies", "Monthly", "Rs. 600", "Potassium & fiber"),
-        ]
-        est_cost = "Rs. 1,810 - Rs. 2,200 / month"
-    elif "Tier 2" in tier_choice:
-        groceries = [
-            ("Low-Fat Paneer", "4.0 kg", "Rs. 1,400", "18g protein / 100g"),
-            ("Plant / Pea Protein", "1 Tub (1kg)", "Rs. 1,600", "25g protein / scoop"),
-            ("Soya Chunks & Dal", "1.5 kg", "Rs. 200", "Secondary clean bulk"),
-            ("Rolled Oats & PB", "1.5 kg", "Rs. 550", "Complex carbs & healthy fats"),
-            ("Curd & Seasonal Greens", "Monthly", "Rs. 800", "Gut health & satiety"),
-        ]
-        est_cost = "Rs. 4,200 - Rs. 4,800 / month"
-    else:
-        groceries = [
-            ("Whey Protein Isolate", "2.0 kg", "Rs. 5,400", "27g protein / scoop"),
-            ("Artisanal Tofu & Paneer", "5.0 kg", "Rs. 2,200", "Clean bioavailability"),
-            ("Greek Yogurt & Berries", "Monthly", "Rs. 1,800", "Probiotics & polyphenols"),
-            ("Almond Butter & Chia", "Monthly", "Rs. 1,100", "Omega-3 & healthy fats"),
-        ]
-        est_cost = "Rs. 8,500 - Rs. 10,500 / month"
-
-    for itm, qty, prc, note in groceries:
-        pdf.cell(190, 6, clean_pdf_str(f"  - {itm} [{qty}] -> {prc} ({note})"), ln=True)
+    for itm, qty, prc, prot_y, roi in plan_data["groceries"]:
+        pdf.cell(190, 6, clean_pdf_str(f"  - {itm} [{qty}] -> {prc} ({prot_y} | {roi})"), ln=True)
     pdf.ln(3)
     pdf.set_font('Helvetica', 'B', 11)
-    pdf.cell(0, 7, clean_pdf_str(f"Total Monthly Investment: {est_cost}"), ln=True)
+    pdf.cell(0, 7, clean_pdf_str(f"Total Monthly Investment: {plan_data['total_cost']} ({plan_data['avg_roi']})"), ln=True)
     return bytes(pdf.output())
 
 menu = st.sidebar.radio("Navigation", [
@@ -604,36 +688,80 @@ elif menu == "📑 InBody & Body Composition":
             st.success("✅ Profile calibrated!")
             st.rerun()
 
-# ------------ SECTION 3: SMART DIET & BUDGET PLANNER ------------
+# ------------ SECTION 3: SMART DIET & BUDGET PLANNER (DYNAMIC 3-TIER + VEG/NON-VEG) ------------
 elif menu == "🥗 Smart Diet & Budget Planner":
     st.title(f"🥗 Smart Diet & Budget Architect — {display_name}")
+    st.markdown("Precision nutritional engineering: High protein, high fiber, minimal calorie density, and maximum rupee value.")
     t_cals = profile.get('target_kcal', 1600)
     t_prot = profile.get('target_protein', 115)
     
-    top_c1, top_c2, top_c3 = st.columns([1, 1, 2])
+    top_c1, top_c2, top_c3 = st.columns([1, 1.2, 1.8])
     with top_c1:
         diet_type = st.radio("Dietary Preference", ["Pure Vegetarian", "Eggetarian / Non-Veg"], horizontal=True)
     with top_c2:
         tier = st.selectbox("Select Investment Tier", [
             "Tier 1: High-ROI Budget (Rs. 1,800 - Rs. 2,500/mo)",
             "Tier 2: Balanced Mid-Range (Rs. 3,800 - Rs. 5,000/mo)",
-            "Tier 3: Premium Convenience (Rs. 7,500 - Rs. 10,000/mo)"
+            "Tier 3: Premium Convenience (Rs. 7,500 - Rs. 10,000+/mo)"
         ])
     with top_c3:
         st.markdown(f"""<div style="background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px 14px;">
             <span style="color:#8b949e; font-size:0.85rem;">CALIBRATED MACRO BLUEPRINT</span><br>
-            <strong>{t_cals} kcal/day</strong> &bull; <span style="color:#3fb950; font-weight:bold;">{t_prot}g Protein</span> &bull; <span>~30g Fiber</span>
+            <strong>{t_cals} kcal/day</strong> &bull; <span style="color:#3fb950; font-weight:bold;">{t_prot}g Protein</span> &bull; <span>~32g Fiber</span>
         </div>""", unsafe_allow_html=True)
         
+    tier_key = "Tier 1" if "Tier 1" in tier else ("Tier 2" if "Tier 2" in tier else "Tier 3")
+    active_plan = DIET_MATRIX.get((diet_type, tier_key), DIET_MATRIX[("Pure Vegetarian", "Tier 1")])
+    
     st.markdown("---")
-    st.subheader("🍱 Daily Meal Blueprint")
-    m_col1, m_col2, m_col3 = st.columns(3)
-    with m_col1:
-        st.markdown("""<div class="tier-card"><span style="color:#3fb950; font-weight:bold;">MEAL 1: PRE/POST</span><h4>Sattu Power Chhas + Banana</h4><p style="font-size:0.9rem;">40g Chana Sattu in buttermilk + 1 banana. ~12g Protein.</p></div>""", unsafe_allow_html=True)
-    with m_col2:
-        st.markdown("""<div class="tier-card"><span style="color:#58a6ff; font-weight:bold;">MEAL 2: LUNCH</span><h4>Soya Bhurji + Curd + Roti</h4><p style="font-size:0.9rem;">60g dry soya chunks + 150g curd + 2 rotis. ~42g Protein.</p></div>""", unsafe_allow_html=True)
-    with m_col3:
-        st.markdown("""<div class="tier-card"><span style="color:#f0883e; font-weight:bold;">MEAL 3: DINNER</span><h4>Moong Sprouts Chaat + Paneer</h4><p style="font-size:0.9rem;">100g sprouted moong + 60g paneer. ~36g Protein.</p></div>""", unsafe_allow_html=True)
+    st.subheader(f"🍱 Daily Meal Blueprint ({diet_type} • {tier_key})")
+    
+    m_cols = st.columns(3)
+    colors = ["#3fb950", "#58a6ff", "#f0883e"]
+    for idx, (m_tag, m_title, m_cost, m_prot, m_cals, m_desc) in enumerate(active_plan["meals"]):
+        with m_cols[idx]:
+            st.markdown(f"""<div class="tier-card">
+                <span style="color:{colors[idx]}; font-weight:bold;">{m_tag}</span>
+                <h4 style="margin:4px 0;">{m_title}</h4>
+                <p style="color:#8b949e; font-size:0.85rem;"><strong>Cost:</strong> {m_cost} | <strong>Protein:</strong> {m_prot} | <strong>Cals:</strong> {m_cals}</p>
+                <p style="font-size:0.9rem;">{m_desc}</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.subheader("🛒 30-Day Bulk Grocery Haul & Spending Forecast")
+    g_tab1, g_tab2 = st.tabs(["📋 Itemized Shopping List", "👨‍🍳 10-Minute Batch Cook Recipes"])
+    
+    with g_tab1:
+        table_md = "| Item | Monthly Quantity | Estimated Cost | Protein Yield | Value Metric (₹/g Protein) |\n| :--- | :--- | :--- | :--- | :--- |\n"
+        for itm, qty, prc, prot_y, roi in active_plan["groceries"]:
+            table_md += f"| **{itm}** | {qty} | {prc} | {prot_y} | **{roi}** |\n"
+        table_md += f"| **TOTAL MONTHLY INVESTMENT** | | **{active_plan['total_cost']}** | **{active_plan['total_prot']}** | **{active_plan['avg_roi']}** |\n"
+        st.markdown(table_md)
+
+    with g_tab2:
+        if diet_type == "Pure Vegetarian":
+            st.markdown("""
+            #### 1. 10-Minute Soya Keema Bhurji (31g Protein | ₹8 cost)
+            * **Step 1:** Boil 60g soya chunks in salted water for 5 minutes. Drain and squeeze water out completely with your hands.
+            * **Step 2:** Pulse the squeezed chunks in a mixer-grinder for 3 seconds until it looks like minced keema.
+            * **Step 3:** Heat 1 tsp mustard oil in a pan, toss in cumin seeds, 1 chopped green chilli, turmeric, salt, and garam masala. Add minced soya and stir fry on high flame for 3 minutes.
+            
+            #### 2. No-Cook Electrolyte Sattu Shake (12g Protein | ₹12 cost)
+            * **Step 1:** Take 40g chana sattu in a shaker. Add 250ml cold water, black salt, roasted jeera powder, and half a lemon. Shake and drink post-workout.
+            
+            #### 3. High-Volume Sprouted Moong Satiety Bowl (24g Protein | ₹15 cost)
+            * **Step 1:** Toss 100g soaked moong sprouts with diced cucumber, tomato, 30g roasted chana, chaat masala, and lime juice.
+            """)
+        else:
+            st.markdown("""
+            #### 1. 8-Minute High-Protein Egg & Soya Bhurji (38g Protein | ₹26 cost)
+            * **Step 1:** Soak 30g soya granules in hot water for 4 mins and squeeze dry.
+            * **Step 2:** Whisk 3 whole eggs with turmeric, chilli powder, and salt. Scramble together with soya granules and chopped onions in 1 tsp oil for 3 minutes.
+            
+            #### 2. 10-Minute Pan-Seared Pepper Chicken Breast (46g Protein | ₹65 cost)
+            * **Step 1:** Slice 200g chicken breast into thin strips; coat with crushed black pepper, garlic paste, lemon juice, and salt.
+            * **Step 2:** Sear on a hot non-stick pan with 1 tsp olive/mustard oil for 4 minutes per side until golden and juicy.
+            """)
 
     st.markdown("---")
     st.subheader("📄 Download Customized 30-Day Diet & Grocery Plan (PDF)")
@@ -736,18 +864,55 @@ elif menu == "🏋️ Adaptive Workout Logger":
         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
         st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" download="KSP_Workout_{display_name}_{log_date}.pdf" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #238636; color: white; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 10px;">📥 Download Workout PDF</a>', unsafe_allow_html=True)
 
-# ------------ SECTION 5: UNIVERSAL FOOD & MACRO AI ------------
+# ------------ SECTION 5: UNIVERSAL FOOD & MACRO AI (TEXT + PHOTO RESTORED) ------------
 elif menu == "🔍 Universal Food & Macro AI":
     st.title("🔍 Universal Food & Macro AI")
-    user_query = st.text_input("Describe your food naturally (e.g. '2 medium bananas', 'moong dal chilla'):")
-    if st.button("🚀 Analyze Nutrition", type="primary"):
-        res = analyze_food_universally(text_query=user_query)
-        st.markdown(f"""<div class="scan-card">
-            <h3 style="color:#58a6ff;">{res.get('item_name', 'Item')} ({res.get('portion_description', '')})</h3>
-            <p style="color:#3fb950;">💡 {res.get('dietary_notes', '')}</p>
-        </div>""", unsafe_allow_html=True)
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Calories", f"{res.get('calories', 0)} kcal")
-        m2.metric("Protein", f"{res.get('protein', 0)} g")
-        m3.metric("Carbs", f"{res.get('carbs', 0)} g")
-        m4.metric("Fat", f"{res.get('fat', 0)} g")
+    st.markdown("Multimodal nutrition intelligence: Type any regional Indian dish or snap a photo of your meal plate for instant macro breakdown.")
+    
+    tab_text, tab_photo = st.tabs(["💬 Natural Language Query", "📸 Real Meal / Food Photo"])
+    
+    with tab_text:
+        user_query = st.text_input(
+            "Describe your food naturally:",
+            placeholder="e.g. '2 medium bananas', 'moong dal chilla with mint chutney', '1 plate idli sambar', '150g paneer bhurji'"
+        )
+        if st.button("🚀 Analyze Nutrition", type="primary", key="btn_text_macro"):
+            if not user_query.strip():
+                st.warning("Please type a food description first.")
+            else:
+                with st.spinner("AI analyzing nutrition & portion metrics..."):
+                    res = analyze_food_universally(text_query=user_query)
+                    st.markdown(f"""<div class="scan-card">
+                        <h3 style="color:#58a6ff; margin-bottom: 2px;">{res.get('item_name', 'Analyzed Item')}</h3>
+                        <p style="color:#8b949e;">Serving: <strong>{res.get('portion_description', '')}</strong></p>
+                        <p style="color:#3fb950; font-size:0.95rem;">💡 <em>{res.get('dietary_notes', '')}</em></p>
+                    </div>""", unsafe_allow_html=True)
+                    
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Calories", f"{res.get('calories', 0)} kcal")
+                    m2.metric("Protein", f"{res.get('protein', 0)} g")
+                    m3.metric("Carbs", f"{res.get('carbs', 0)} g")
+                    m4.metric("Fat", f"{res.get('fat', 0)} g")
+
+    with tab_photo:
+        st.markdown("Upload or take a photo of any meal, plate, snack, or fruit:")
+        photo_file = st.file_uploader("Upload Meal Photo", type=["jpg", "jpeg", "png"], key="universal_meal_img")
+        if photo_file:
+            raw_meal_img = Image.open(photo_file)
+            pil_img = ImageOps.exif_transpose(raw_meal_img)
+            st.image(pil_img, caption="Meal Uploaded", width=340)
+            
+            if st.button("🔍 AI Vision Scan Meal", type="primary", key="btn_photo_macro"):
+                with st.spinner("Analyzing dish contents, ingredients, and portion weight..."):
+                    res = analyze_food_universally(pil_image=pil_img)
+                    st.markdown(f"""<div class="scan-card">
+                        <h3 style="color:#58a6ff; margin-bottom: 2px;">{res.get('item_name', 'Recognized Plate')}</h3>
+                        <p style="color:#8b949e;">Estimated Serving: <strong>{res.get('portion_description', '')}</strong></p>
+                        <p style="color:#3fb950; font-size:0.95rem;">💡 <em>{res.get('dietary_notes', '')}</em></p>
+                    </div>""", unsafe_allow_html=True)
+                    
+                    p1, p2, p3, p4 = st.columns(4)
+                    p1.metric("Calories", f"{res.get('calories', 0)} kcal")
+                    p2.metric("Protein", f"{res.get('protein', 0)} g")
+                    p3.metric("Carbs", f"{res.get('carbs', 0)} g")
+                    p4.metric("Fat", f"{res.get('fat', 0)} g")
