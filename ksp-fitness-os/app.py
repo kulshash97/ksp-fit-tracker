@@ -343,7 +343,7 @@ DIET_MATRIX = {
 
 WORKOUT_SYSTEMS = {
     "Upper / Lower (Metabolic Density - Optimal for BF > 25%)": {
-        "Upper Power & Density": [
+        "Upper Power & Density (Mon / Thu)": [
             ("Flat Bench Press / Machine Chest Press", "barbell"),
             ("Lat Pulldown / Assisted Pull-Ups", "machine"),
             ("Incline Dumbbell Press", "per_side"),
@@ -352,13 +352,21 @@ WORKOUT_SYSTEMS = {
             ("Rope Triceps Pushdowns", "machine"),
             ("Dumbbell Biceps Curls", "per_side")
         ],
-        "Lower Compound & Posterior Chain": [
+        "Lower Compound & Posterior Chain (Tue / Fri)": [
             ("Barbell Squat / Heavy Leg Press", "barbell"),
             ("Romanian Deadlifts (RDLs)", "barbell"),
             ("Walking Lunges / Bulgarian Split Squats", "per_side"),
             ("Leg Curl / Leg Extension Superset", "machine"),
             ("Standing Calf Raises", "machine"),
             ("Hanging Leg Raises / Core Hollow Hold", "bodyweight")
+        ],
+        "Active Recovery, Cardio & Mobility (Wed / Sat)": [
+            ("Incline Treadmill Walk (15% Incline @ 2.5-3.0 km/h - Mins)", "bodyweight"),
+            ("Stationary Cycling / Elliptical LISS (Mins)", "bodyweight"),
+            ("Kettlebell Swings / Light Farmer Carry (Fat Burn)", "machine"),
+            ("Dead Bug & Forearm Plank Hold (Seconds)", "bodyweight"),
+            ("90/90 Hip Openers & Thoracic Spine Mobility (Reps)", "bodyweight"),
+            ("Cat-Cow & Deep Squat Hold Decompression (Seconds)", "bodyweight")
         ]
     },
     "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)": {
