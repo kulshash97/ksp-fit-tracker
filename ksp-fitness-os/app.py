@@ -342,32 +342,54 @@ DIET_MATRIX = {
 }
 
 WORKOUT_SYSTEMS = {
-    "Upper / Lower (Metabolic Density - Optimal for BF > 25%)": {
+    "Bro Split (6-Day Complete Hypertrophy & Daily Cardio Finisher)": {
+        "Day 1 & 4: Back & Biceps (Mon / Thu)": [
+            ("1. Lat Pulldown / Assisted Pull-Ups (Lat Width Compound)", "machine"),
+            ("2. Seated Cable Row / Machine Row (Mid-Back Thickness)", "machine"),
+            ("3. Single-Arm Dumbbell Row (Unilateral Lats & Rhomboids)", "per_side"),
+            ("4. Straight-Arm Lat Pulldown & Rear Delt Fly (Upper Back/Rear Delts)", "machine"),
+            ("5. Standing Dumbbell / Barbell Biceps Curls (Biceps Peak)", "per_side"),
+            ("6. Dumbbell Hammer Curls (Brachialis & Forearms)", "per_side"),
+            ("7. Dead Bug & Forearm Plank Hold (Core Stability - Secs)", "bodyweight"),
+            ("8. Finisher: 5m Stationary Cycle + 15m Incline Walk (15% @ 2.5-3.0 km/h)", "bodyweight")
+        ],
+        "Day 2 & 5: Chest & Triceps (Tue / Fri)": [
+            ("1. Flat Barbell / Machine Chest Press (Mid-Chest Compound)", "barbell"),
+            ("2. Incline Dumbbell Press (Upper Clavicular Chest)", "per_side"),
+            ("3. Pec Deck / Cable Chest Flyes (Inner & Lower Chest Isolation)", "machine"),
+            ("4. Overhead Dumbbell / Cable Triceps Extension (Triceps Long Head)", "per_side"),
+            ("5. Rope Triceps Pushdowns (Lateral & Medial Triceps Heads)", "machine"),
+            ("6. Hanging Leg Raises & Forearm Plank (Core Stability - Reps/Secs)", "bodyweight"),
+            ("7. Finisher: 5m Stationary Cycle + 15m Incline Walk (15% @ 2.5-3.0 km/h)", "bodyweight")
+        ],
+        "Day 3 & 6: Legs & Shoulders (Wed / Sat)": [
+            ("1. Barbell Squat / Heavy Leg Press (Quad & Glute Compound)", "barbell"),
+            ("2. Romanian Deadlifts (RDLs - Hamstrings & Glutes)", "barbell"),
+            ("3. Seated Dumbbell Overhead Press (Anterior & Medial Delts)", "per_side"),
+            ("4. Walking Lunges / Bulgarian Split Squats (Unilateral Legs)", "per_side"),
+            ("5. Leg Extension & Seated Leg Curl Superset (Quad/Ham Isolation)", "machine"),
+            ("6. Standing Lateral Raises & Standing Calf Raises (Side Delts & Calves)", "per_side"),
+            ("7. Dead Bug & Deep Squat Hold Decompression (Core & Hip Mobility)", "bodyweight"),
+            ("8. Finisher: 5m Light Cycle + 15m Incline Walk (15% @ 2.5-3.0 km/h)", "bodyweight")
+        ]
+    },
+    "Upper / Lower (Metabolic Density - 4-Day Split)": {
         "Upper Power & Density (Mon / Thu)": [
             ("1. Flat Bench Press / Machine Chest Press (Heavy Compound)", "barbell"),
             ("2. Lat Pulldown / Assisted Pull-Ups (Vertical Pull)", "machine"),
             ("3. Incline Dumbbell Press (Upper Chest)", "per_side"),
             ("4. Seated Cable Row (Mid-Back Thickness)", "machine"),
             ("5. Standing Dumbbell Lateral Raises (Side Delts)", "per_side"),
-            ("6. Rope Triceps Pushdowns (Isolation)", "machine"),
-            ("7. Dumbbell Biceps Curls (Isolation)", "per_side")
+            ("6. Rope Triceps Pushdowns & Dumbbell Curls (Arms)", "machine"),
+            ("7. Finisher: 5m Stationary Cycle + 15m Incline Walk (15%)", "bodyweight")
         ],
         "Lower Compound & Posterior Chain (Tue / Fri)": [
             ("1. Barbell Squat / Heavy Leg Press (Quad Compound)", "barbell"),
             ("2. Romanian Deadlifts (RDLs - Posterior Chain)", "barbell"),
             ("3. Walking Lunges / Bulgarian Split Squats (Unilateral)", "per_side"),
             ("4. Leg Curl / Leg Extension Superset (Isolation)", "machine"),
-            ("5. Standing Calf Raises (Calves)", "machine"),
-            ("6. Hanging Leg Raises / Core Hollow Hold (Core Finisher)", "bodyweight")
-        ],
-        "Active Recovery, Cardio & Mobility (Wed / Sat)": [
-            ("1. Cat-Cow & Deep Squat Hold Decompression (Mobility - Secs)", "bodyweight"),
-            ("2. 90/90 Hip Openers & Thoracic Spine Mobility (Reps)", "bodyweight"),
-            ("3. Dead Bug & Forearm Plank Hold (Core Stability - Secs)", "bodyweight"),
-            ("4. Kettlebell Swings (Hip-Hinge Fat Burn - Reps)", "machine"),
-            ("5. Farmer Carry / Walk (Metabolic Conditioning - Meters)", "machine"),
-            ("6. Incline Treadmill Walk Finisher (15% @ 2.5-3.0 km/h - Mins)", "bodyweight"),
-            ("7. Stationary Cycling / Elliptical LISS Optional (Mins)", "bodyweight")
+            ("5. Standing Calf Raises & Core Hollow Hold", "machine"),
+            ("6. Finisher: 5m Light Cycle + 15m Incline Walk (15%)", "bodyweight")
         ]
     },
     "Push / Pull / Legs (Recomp Split - Optimal for BF 18% - 25%)": {
@@ -375,48 +397,23 @@ WORKOUT_SYSTEMS = {
             ("1. Flat Bench Press / Machine Chest Press (Compound)", "barbell"),
             ("2. Overhead Dumbbell Press (Shoulder Compound)", "per_side"),
             ("3. Incline Dumbbell / Machine Press (Upper Chest)", "per_side"),
-            ("4. Pec Deck Flyes (Chest Isolation)", "machine"),
-            ("5. Lateral Raises (Dumbbell/Cable)", "per_side"),
-            ("6. Triceps Pushdowns (Rope Finisher)", "machine")
+            ("4. Pec Deck Flyes & Lateral Raises", "machine"),
+            ("5. Triceps Pushdowns & Overhead Extension", "machine"),
+            ("6. Finisher: 5m Cycle + 15m Incline Walk (15%)", "bodyweight")
         ],
         "Pull Day (Back, Rear Delts & Biceps)": [
             ("1. Lat Pulldown / Assisted Pull-Ups (Compound Width)", "machine"),
             ("2. Seated Cable Row / Machine Row (Compound Thickness)", "machine"),
-            ("3. Single-Arm Dumbbell Row (Unilateral Back)", "per_side"),
-            ("4. Straight-Arm Lat Pulldown / Rear Delt Fly", "machine"),
-            ("5. Dumbbell Biceps Curls", "per_side"),
-            ("6. Hammer Curls (Brachialis & Forearm Finisher)", "per_side")
+            ("3. Single-Arm Dumbbell Row & Rear Delt Fly", "per_side"),
+            ("4. Dumbbell Biceps Curls & Hammer Curls", "per_side"),
+            ("5. Finisher: 5m Cycle + 15m Incline Walk (15%)", "bodyweight")
         ],
         "Leg Day (Quads, Hamstrings, Calves & Core)": [
             ("1. Barbell Squat / Leg Press (Primary Compound)", "barbell"),
             ("2. Romanian Deadlifts (RDLs - Hamstring/Glute Compound)", "barbell"),
-            ("3. Bulgarian Split Squats / Walking Lunges", "per_side"),
-            ("4. Leg Extensions & Seated Leg Curls", "machine"),
-            ("5. Standing Calf Raises", "machine"),
-            ("6. Cable Crunches / Hanging Leg Raises", "bodyweight")
-        ]
-    },
-    "Arnold Split (High Volume Hypertrophy - Optimal for BF < 18%)": {
-        "Chest & Back": [
-            ("1. Barbell Incline Bench Press", "barbell"),
-            ("2. Barbell Bent-Over Row", "barbell"),
-            ("3. Dumbbell Flat Bench Press", "per_side"),
-            ("4. Weighted or Lat Pulldowns", "machine"),
-            ("5. Cable Dumbbell Flyes (Finisher)", "per_side")
-        ],
-        "Shoulders & Arms": [
-            ("1. Seated Dumbbell Overhead Press", "per_side"),
-            ("2. Lateral Raises Heavy Drop-Set", "per_side"),
-            ("3. Barbell Biceps Curls", "barbell"),
-            ("4. Skull Crushers / Overhead Triceps Extension", "barbell"),
-            ("5. Incline Hammer Curls & Rope Pushdowns", "per_side")
-        ],
-        "Legs & Abs": [
-            ("1. Barbell Back Squats", "barbell"),
-            ("2. Romanian Deadlifts", "barbell"),
-            ("3. Leg Press Heavy Volume", "barbell"),
-            ("4. Standing Calf Raises", "machine"),
-            ("5. Weighted Cable Crunches & Hanging Leg Raises", "bodyweight")
+            ("3. Bulgarian Split Squats & Leg Extensions/Curls", "per_side"),
+            ("4. Standing Calf Raises & Hanging Leg Raises", "machine"),
+            ("5. Finisher: 5m Light Cycle + 15m Incline Walk (15%)", "bodyweight")
         ]
     }
 }
